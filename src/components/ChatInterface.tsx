@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { ModelSelector } from "./ModelSelector";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/enhanced-sync-engine";
+import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/corrected-sync-engine";
 
 export function ChatInterface() {
   const { state, actions } = useEnhancedSync();
@@ -268,7 +268,6 @@ export function ChatInterface() {
             disabled={isSending}
             rows={1}
             style={{
-              height: 'auto',
               minHeight: '44px',
               height: `${Math.min(Math.max(44, input.split('\n').length * 20 + 24), 128)}px`
             }}

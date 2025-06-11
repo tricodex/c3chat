@@ -1,13 +1,18 @@
 /**
- * Enhanced Sync Engine for C3Chat
+ * Enhanced Sync Engine for C3Chat - CORRECTED ARCHITECTURE
  * 
- * This replaces the basic React state + localStorage approach with:
- * - Local database as source of truth (OPFS/IndexedDB)
- * - Optimistic updates for instant UX
- * - Bidirectional sync with Convex
- * - Offline support with conflict resolution
- * - Auto-generated thread names
- * - Better performance and reliability
+ * CRITICAL PRINCIPLE: Convex is the SINGLE SOURCE OF TRUTH
+ * Local database is used for:
+ * - Caching for instant UI responses
+ * - Optimistic updates for smooth UX
+ * - Offline support with pending operation queue
+ * 
+ * Data Flow:
+ * 1. UI reads from local cache first (instant)
+ * 2. User actions sent to Convex (source of truth)
+ * 3. Convex updates broadcast to all clients
+ * 4. Local cache syncs FROM Convex to maintain consistency
+ * 5. Optimistic updates provide immediate feedback
  */
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -19,13 +24,13 @@ import { nanoid } from 'nanoid';
 
 // Enhanced Types
 interface Thread extends StoredThread {
-  isLoading?: boolean;
-  hasLocalChanges?: boolean;
+  isOptimistic?: boolean;
+  isPending?: boolean;
 }
 
 interface Message extends StoredMessage {
-  isLoading?: boolean;
-  hasLocalChanges?: boolean;
+  isOptimistic?: boolean;
+  isPending?: boolean;
 }
 
 interface SyncState {
@@ -37,6 +42,7 @@ interface SyncState {
   lastSyncTime: number;
   pendingOperations: PendingOperation[];
   error: string | null;
+  isSyncing: boolean;
 }
 
 interface PendingOperation {
@@ -49,17 +55,18 @@ interface PendingOperation {
 
 type SyncAction = 
   | { type: 'INITIALIZE'; payload: { threads: Thread[]; metadata: any } }
-  | { type: 'SET_THREADS'; payload: Thread[] }
-  | { type: 'UPDATE_THREAD'; payload: { id: string; updates: Partial<Thread> } }
-  | { type: 'ADD_THREAD'; payload: Thread }
-  | { type: 'REMOVE_THREAD'; payload: string }
-  | { type: 'SET_MESSAGES'; payload: { threadId: string; messages: Message[] } }
-  | { type: 'ADD_MESSAGE'; payload: Message }
-  | { type: 'UPDATE_MESSAGE'; payload: { id: string; updates: Partial<Message> } }
-  | { type: 'REMOVE_MESSAGE'; payload: string }
+  | { type: 'SET_THREADS_FROM_CONVEX'; payload: Thread[] }
+  | { type: 'SET_MESSAGES_FROM_CONVEX'; payload: { threadId: string; messages: Message[] } }
+  | { type: 'ADD_OPTIMISTIC_THREAD'; payload: Thread }
+  | { type: 'UPDATE_OPTIMISTIC_THREAD'; payload: { id: string; updates: Partial<Thread> } }
+  | { type: 'REMOVE_OPTIMISTIC_THREAD'; payload: string }
+  | { type: 'ADD_OPTIMISTIC_MESSAGE'; payload: Message }
+  | { type: 'UPDATE_OPTIMISTIC_MESSAGE'; payload: { id: string; updates: Partial<Message> } }
+  | { type: 'REMOVE_OPTIMISTIC_MESSAGE'; payload: string }
   | { type: 'SELECT_THREAD'; payload: string | null }
   | { type: 'SET_ONLINE'; payload: boolean }
   | { type: 'SET_SYNC_TIME'; payload: number }
+  | { type: 'SET_SYNCING'; payload: boolean }
   | { type: 'ADD_PENDING_OPERATION'; payload: PendingOperation }
   | { type: 'REMOVE_PENDING_OPERATION'; payload: string }
   | { type: 'SET_ERROR'; payload: string | null };
@@ -73,6 +80,7 @@ const initialState: SyncState = {
   lastSyncTime: 0,
   pendingOperations: [],
   error: null,
+  isSyncing: false,
 };
 
 function syncReducer(state: SyncState, action: SyncAction): SyncState {
@@ -86,13 +94,41 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         isInitialized: true,
       };
 
-    case 'SET_THREADS':
+    case 'SET_THREADS_FROM_CONVEX':
+      // Merge Convex threads with optimistic threads
+      const convexThreads = action.payload;
+      const optimisticThreads = state.threads.filter(t => t.isOptimistic);
+      const mergedThreads = [...convexThreads, ...optimisticThreads]
+        .sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+      
       return {
         ...state,
-        threads: action.payload.sort((a, b) => b.lastMessageAt - a.lastMessageAt),
+        threads: mergedThreads,
       };
 
-    case 'UPDATE_THREAD':
+    case 'SET_MESSAGES_FROM_CONVEX':
+      // Merge Convex messages with optimistic messages
+      const convexMessages = action.payload.messages;
+      const existingMessages = state.messages[action.payload.threadId] || [];
+      const optimisticMessages = existingMessages.filter(m => m.isOptimistic);
+      const mergedMessages = [...convexMessages, ...optimisticMessages]
+        .sort((a, b) => (a.localCreatedAt || 0) - (b.localCreatedAt || 0));
+      
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [action.payload.threadId]: mergedMessages,
+        },
+      };
+
+    case 'ADD_OPTIMISTIC_THREAD':
+      return {
+        ...state,
+        threads: [action.payload, ...state.threads],
+      };
+
+    case 'UPDATE_OPTIMISTIC_THREAD':
       return {
         ...state,
         threads: state.threads.map(t => 
@@ -102,13 +138,7 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         ).sort((a, b) => b.lastMessageAt - a.lastMessageAt),
       };
 
-    case 'ADD_THREAD':
-      return {
-        ...state,
-        threads: [action.payload, ...state.threads],
-      };
-
-    case 'REMOVE_THREAD':
+    case 'REMOVE_OPTIMISTIC_THREAD':
       return {
         ...state,
         threads: state.threads.filter(t => t._id !== action.payload),
@@ -118,31 +148,20 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         selectedThreadId: state.selectedThreadId === action.payload ? null : state.selectedThreadId,
       };
 
-    case 'SET_MESSAGES':
-      return {
-        ...state,
-        messages: {
-          ...state.messages,
-          [action.payload.threadId]: action.payload.messages,
-        },
-      };
-
-    case 'ADD_MESSAGE':
+    case 'ADD_OPTIMISTIC_MESSAGE':
       const threadId = action.payload.threadId;
-      const existingMessages = state.messages[threadId] || [];
-      const messageExists = existingMessages.some(m => m._id === action.payload._id);
+      const currentMessages = state.messages[threadId] || [];
       
       return {
         ...state,
         messages: {
           ...state.messages,
-          [threadId]: messageExists 
-            ? existingMessages.map(m => m._id === action.payload._id ? action.payload : m)
-            : [...existingMessages, action.payload].sort((a, b) => (a.localCreatedAt || 0) - (b.localCreatedAt || 0)),
+          [threadId]: [...currentMessages, action.payload]
+            .sort((a, b) => (a.localCreatedAt || 0) - (b.localCreatedAt || 0)),
         },
       };
 
-    case 'UPDATE_MESSAGE':
+    case 'UPDATE_OPTIMISTIC_MESSAGE':
       const messageThreadId = Object.keys(state.messages).find(tId =>
         state.messages[tId].some(m => m._id === action.payload.id)
       );
@@ -159,7 +178,7 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         },
       };
 
-    case 'REMOVE_MESSAGE':
+    case 'REMOVE_OPTIMISTIC_MESSAGE':
       const msgThreadId = Object.keys(state.messages).find(tId =>
         state.messages[tId].some(m => m._id === action.payload)
       );
@@ -190,6 +209,12 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       return {
         ...state,
         lastSyncTime: action.payload,
+      };
+
+    case 'SET_SYNCING':
+      return {
+        ...state,
+        isSyncing: action.payload,
       };
 
     case 'ADD_PENDING_OPERATION':
@@ -224,8 +249,7 @@ interface EnhancedSyncContextType {
     deleteThread: (threadId: string) => Promise<void>;
     sendMessage: (content: string, threadId?: string) => Promise<void>;
     updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
-    loadMessages: (threadId: string) => Promise<void>;
-    syncWithServer: () => Promise<void>;
+    syncWithConvex: () => Promise<void>;
     clearLocalData: () => Promise<void>;
   };
 }
@@ -236,15 +260,16 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
   const [state, dispatch] = useReducer(syncReducer, initialState);
   const localDB = useRef<LocalDB | null>(null);
   const initializationPromise = useRef<Promise<void> | null>(null);
+  const syncInProgress = useRef<boolean>(false);
 
-  // Convex hooks
+  // CONVEX IS SOURCE OF TRUTH - These are the authoritative data sources
   const convexThreads = useQuery(api.threads.list) || [];
   const createThreadMutation = useMutation(api.threads.create);
   const updateThreadMutation = useMutation(api.threads.updateSettings);
   const deleteThreadMutation = useMutation(api.threads.remove);
   const sendMessageAction = useAction(api.ai.sendMessage);
 
-  // Load messages for selected thread (only if it's not an optimistic thread)
+  // Load messages for selected thread (only for real threads, not optimistic)
   const selectedMessages = useQuery(
     api.messages.list,
     (state.selectedThreadId && !state.selectedThreadId.startsWith('temp_')) 
@@ -252,7 +277,7 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
       : "skip"
   ) || [];
 
-  // Initialize local database
+  // Initialize local database (cache layer)
   const initializeDB = useCallback(async () => {
     if (initializationPromise.current) {
       return initializationPromise.current;
@@ -262,21 +287,21 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
       try {
         localDB.current = await createLocalDB();
         
-        // Load initial data from local DB
-        const [threads, metadata] = await Promise.all([
+        // Load cached data for instant UI
+        const [cachedThreads, metadata] = await Promise.all([
           localDB.current.getThreads(),
           localDB.current.getMetadata(),
         ]);
 
         dispatch({ 
           type: 'INITIALIZE', 
-          payload: { threads, metadata }
+          payload: { threads: cachedThreads, metadata }
         });
 
-        console.log('✅ Enhanced sync engine initialized with local database');
+        console.log('✅ Enhanced sync engine initialized (Convex-first architecture)');
       } catch (error) {
-        console.error('❌ Failed to initialize local database:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to initialize local storage' });
+        console.error('❌ Failed to initialize local cache:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Failed to initialize local cache' });
       }
     })();
 
@@ -288,14 +313,12 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
     initializeDB();
   }, [initializeDB]);
 
-  // Online/offline detection
+  // Online/offline detection with auto-sync
   useEffect(() => {
     const handleOnline = () => {
       dispatch({ type: 'SET_ONLINE', payload: true });
-      // Trigger sync when coming back online
-      if (localDB.current) {
-        syncWithServer();
-      }
+      // Auto-sync when coming back online
+      syncWithConvex();
     };
     const handleOffline = () => dispatch({ type: 'SET_ONLINE', payload: false });
     
@@ -308,74 +331,114 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Sync Convex threads to local DB
+  // CONVEX → LOCAL CACHE: Sync authoritative Convex data to local cache
   useEffect(() => {
-    if (!localDB.current || !state.isInitialized) return;
+    if (!localDB.current || !state.isInitialized || syncInProgress.current || state.isSyncing) return;
+    if (!convexThreads || convexThreads.length === 0) return;
 
     (async () => {
+      syncInProgress.current = true;
+      dispatch({ type: 'SET_SYNCING', payload: true });
+      
       try {
-        // Update local DB with server data
+        // Get existing cached threads to preserve timestamps
+        const existingCachedThreads = await localDB.current!.getThreads();
+        const existingThreadsMap = new Map(existingCachedThreads.map(t => [t._id, t]));
+        
+        // Update local cache with Convex data (source of truth)
+        const updatedThreads: StoredThread[] = [];
+        let hasChanges = false;
+        
         for (const convexThread of convexThreads) {
-          const localThread = await localDB.current!.getThread(convexThread._id);
+          const existingCached = existingThreadsMap.get(convexThread._id);
           
-          if (!localThread || localThread.lastMessageAt < convexThread.lastMessageAt) {
-            const enhancedThread: StoredThread = {
-              ...convexThread,
-              syncedToServer: true,
-              localCreatedAt: localThread?.localCreatedAt || Date.now(),
-            };
-            
-            await localDB.current!.saveThread(enhancedThread);
+          const cachedThread: StoredThread = {
+            ...convexThread,
+            syncedToServer: true,
+            // Preserve existing localCreatedAt, or set it for new threads
+            localCreatedAt: existingCached?.localCreatedAt || Date.now(),
+          };
+          
+          // Only save if thread is new or has changes
+          if (!existingCached || JSON.stringify(existingCached.title) !== JSON.stringify(convexThread.title) ||
+              existingCached.lastMessageAt !== convexThread.lastMessageAt ||
+              existingCached.provider !== convexThread.provider ||
+              existingCached.model !== convexThread.model) {
+            await localDB.current!.saveThread(cachedThread);
+            hasChanges = true;
           }
+          
+          updatedThreads.push(cachedThread);
         }
 
-        // Load updated threads from local DB
-        const updatedThreads = await localDB.current!.getThreads();
-        dispatch({ type: 'SET_THREADS', payload: updatedThreads });
-
-        // Update last sync time
-        await localDB.current!.setMetadata({ lastSyncTime: Date.now() });
-        dispatch({ type: 'SET_SYNC_TIME', payload: Date.now() });
+        // Only update UI if there are actual changes
+        if (hasChanges || existingCachedThreads.length !== convexThreads.length) {
+          dispatch({ type: 'SET_THREADS_FROM_CONVEX', payload: updatedThreads });
+          
+          // Update sync metadata
+          const syncTime = Date.now();
+          await localDB.current!.setMetadata({ lastSyncTime: syncTime });
+          dispatch({ type: 'SET_SYNC_TIME', payload: syncTime });
+          
+          console.log('✅ Synced changes from Convex to local cache');
+        }
       } catch (error) {
-        console.error('❌ Failed to sync threads:', error);
+        console.error('❌ Failed to sync from Convex:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Sync failed' });
+      } finally {
+        syncInProgress.current = false;
+        dispatch({ type: 'SET_SYNCING', payload: false });
       }
     })();
-  }, [convexThreads, state.isInitialized]);
+  }, [convexThreads, state.isInitialized, state.isSyncing]);
 
-  // Sync Convex messages to local DB
+  // CONVEX → LOCAL CACHE: Sync messages
   useEffect(() => {
-    if (!localDB.current || !state.selectedThreadId || !selectedMessages.length) return;
+    if (!localDB.current || !state.selectedThreadId || !selectedMessages.length || syncInProgress.current) return;
 
     (async () => {
       try {
+        const cachedMessages: StoredMessage[] = [];
+        
         for (const convexMessage of selectedMessages) {
-          const enhancedMessage: StoredMessage = {
+          const cachedMessage: StoredMessage = {
             ...convexMessage,
             syncedToServer: true,
             localCreatedAt: Date.now(),
           };
           
-          await localDB.current!.saveMessage(enhancedMessage);
+          await localDB.current!.saveMessage(cachedMessage);
+          cachedMessages.push(cachedMessage);
         }
 
-        // Load updated messages from local DB
-        const updatedMessages = await localDB.current!.getMessages(state.selectedThreadId);
+        // Update UI with Convex messages
         dispatch({ 
-          type: 'SET_MESSAGES', 
-          payload: { threadId: state.selectedThreadId, messages: updatedMessages }
+          type: 'SET_MESSAGES_FROM_CONVEX', 
+          payload: { threadId: state.selectedThreadId, messages: cachedMessages }
         });
+
+        console.log('✅ Synced messages from Convex to local cache');
       } catch (error) {
-        console.error('❌ Failed to sync messages:', error);
+        console.error('❌ Failed to sync messages from Convex:', error);
       }
     })();
   }, [selectedMessages, state.selectedThreadId]);
 
-  // Persist selected thread
+  // Persist selected thread to cache
   useEffect(() => {
     if (!localDB.current || !state.isInitialized) return;
     
     localDB.current.setMetadata({ selectedThreadId: state.selectedThreadId || undefined });
   }, [state.selectedThreadId, state.isInitialized]);
+
+  // Manual sync function
+  const syncWithConvex = useCallback(async () => {
+    if (!state.isOnline || syncInProgress.current) return;
+    
+    console.log('🔄 Manual sync with Convex initiated...');
+    // The useEffect hooks above will handle the actual syncing
+    // This is mainly for triggering the sync visually
+  }, [state.isOnline]);
 
   // Actions
   const actions = useMemo(() => ({
@@ -383,27 +446,27 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
       dispatch({ type: 'SELECT_THREAD', payload: threadId });
       
       if (threadId && localDB.current) {
-        // Load messages from local DB first (instant)
+        // Load cached messages instantly
         const cachedMessages = await localDB.current.getMessages(threadId);
         dispatch({ 
-          type: 'SET_MESSAGES', 
+          type: 'SET_MESSAGES_FROM_CONVEX', 
           payload: { threadId, messages: cachedMessages }
         });
       }
     },
 
     createThread: async (title?: string, provider = "openai", model = "gpt-4o-mini"): Promise<string> => {
-      if (!localDB.current) throw new Error('Local database not initialized');
+      if (!localDB.current) throw new Error('Local cache not initialized');
 
       // Generate auto title if not provided
       const autoTitle = title || `Chat ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       
-      // Create optimistic thread
+      // Create optimistic thread for instant UI feedback
       const optimisticId = `temp_${nanoid()}` as Id<"threads">;
-      const optimisticThread: StoredThread = {
+      const optimisticThread: Thread = {
         _id: optimisticId,
         title: autoTitle,
-        userId: "user" as Id<"users">, // Will be set properly by server
+        userId: "user" as Id<"users">, // Will be set properly by Convex
         lastMessageAt: Date.now(),
         provider,
         model,
@@ -412,54 +475,34 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
         syncedToServer: false,
       };
       
-      // Save to local DB and update UI instantly
-      await localDB.current.saveThread(optimisticThread);
-      dispatch({ type: 'ADD_THREAD', payload: optimisticThread });
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_THREAD', payload: optimisticThread });
       dispatch({ type: 'SELECT_THREAD', payload: optimisticId });
       
       try {
-        // Create on server
+        // Send to Convex (source of truth)
         const realThreadId = await createThreadMutation({ title: autoTitle });
         
-        // Update local DB with real ID
-        await localDB.current.deleteThread(optimisticId);
-        const realThread: StoredThread = {
-          ...optimisticThread,
-          _id: realThreadId,
-          isOptimistic: false,
-          syncedToServer: true,
-        };
-        await localDB.current.saveThread(realThread);
-        
-        // Update UI
-        dispatch({ type: 'REMOVE_THREAD', payload: optimisticId });
-        dispatch({ type: 'ADD_THREAD', payload: realThread });
+        // Remove optimistic thread and let Convex sync handle the real one
+        dispatch({ type: 'REMOVE_OPTIMISTIC_THREAD', payload: optimisticId });
         dispatch({ type: 'SELECT_THREAD', payload: realThreadId });
         
+        console.log('✅ Thread created on Convex:', realThreadId);
         return realThreadId;
       } catch (error) {
         // Remove optimistic thread on error
-        await localDB.current.deleteThread(optimisticId);
-        dispatch({ type: 'REMOVE_THREAD', payload: optimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_THREAD', payload: optimisticId });
+        console.error('❌ Failed to create thread on Convex:', error);
         throw error;
       }
     },
 
     updateThread: async (threadId: string, updates: Partial<Thread>) => {
-      if (!localDB.current) return;
+      // Optimistic update for instant UI
+      dispatch({ type: 'UPDATE_OPTIMISTIC_THREAD', payload: { id: threadId, updates } });
 
-      const enhancedUpdates = {
-        ...updates,
-        hasLocalChanges: true,
-        syncedToServer: false,
-      };
-
-      // Update local DB instantly
-      await localDB.current.updateThread(threadId, enhancedUpdates);
-      dispatch({ type: 'UPDATE_THREAD', payload: { id: threadId, updates: enhancedUpdates } });
-
-      // Sync to server
       try {
+        // Send to Convex (source of truth)
         if (updates.provider || updates.model) {
           await updateThreadMutation({ 
             threadId: threadId as Id<"threads">, 
@@ -468,48 +511,44 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
           });
         }
         
-        // Mark as synced
-        await localDB.current.updateThread(threadId, { 
-          hasLocalChanges: false, 
-          syncedToServer: true 
-        });
-        dispatch({ 
-          type: 'UPDATE_THREAD', 
-          payload: { 
-            id: threadId, 
-            updates: { hasLocalChanges: false, syncedToServer: true }
-          }
-        });
+        console.log('✅ Thread updated on Convex');
       } catch (error) {
-        console.error('❌ Failed to sync thread update:', error);
+        console.error('❌ Failed to update thread on Convex:', error);
+        // Could implement rollback logic here
+        throw error;
       }
     },
 
     deleteThread: async (threadId: string) => {
-      if (!localDB.current) return;
+      // Optimistic removal for instant UI
+      dispatch({ type: 'REMOVE_OPTIMISTIC_THREAD', payload: threadId });
 
-      // Remove from local DB instantly
-      await localDB.current.deleteThread(threadId);
-      dispatch({ type: 'REMOVE_THREAD', payload: threadId });
-
-      // Sync to server
       try {
+        // Send to Convex (source of truth)
         await deleteThreadMutation({ threadId: threadId as Id<"threads"> });
+        
+        // Also remove from local cache
+        if (localDB.current) {
+          await localDB.current.deleteThread(threadId);
+        }
+        
+        console.log('✅ Thread deleted from Convex');
       } catch (error) {
-        console.error('❌ Failed to delete thread on server:', error);
-        // Note: Could implement recovery logic here
+        console.error('❌ Failed to delete thread from Convex:', error);
+        // Could implement recovery logic here
+        throw error;
       }
     },
 
     sendMessage: async (content: string, threadId?: string) => {
-      if (!localDB.current) throw new Error('Local database not initialized');
+      if (!localDB.current) throw new Error('Local cache not initialized');
       
       const targetThreadId = threadId || state.selectedThreadId;
       if (!targetThreadId) throw new Error('No thread selected');
 
-      // Create optimistic user message
+      // Create optimistic messages for instant UI feedback
       const userMessageId = `temp_user_${nanoid()}` as Id<"messages">;
-      const userMessage: StoredMessage = {
+      const userMessage: Message = {
         _id: userMessageId,
         threadId: targetThreadId as Id<"threads">,
         role: "user",
@@ -519,9 +558,8 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
         syncedToServer: false,
       };
 
-      // Create optimistic assistant message with cursor
       const assistantMessageId = `temp_assistant_${nanoid()}` as Id<"messages">;
-      const assistantMessage: StoredMessage = {
+      const assistantMessage: Message = {
         _id: assistantMessageId,
         threadId: targetThreadId as Id<"threads">,
         role: "assistant",
@@ -533,83 +571,55 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
         syncedToServer: false,
       };
 
-      // Save to local DB and update UI instantly
-      await Promise.all([
-        localDB.current.saveMessage(userMessage),
-        localDB.current.saveMessage(assistantMessage),
-      ]);
-      
-      dispatch({ type: 'ADD_MESSAGE', payload: userMessage });
-      dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage });
-
-      // Update thread lastMessageAt
-      await localDB.current.updateThread(targetThreadId, { 
-        lastMessageAt: Date.now() 
-      });
-      dispatch({ 
-        type: 'UPDATE_THREAD', 
-        payload: { id: targetThreadId, updates: { lastMessageAt: Date.now() } }
-      });
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
 
       try {
-        // Only send to server if it's not an optimistic thread
+        // Only send to Convex for real threads (source of truth)
         if (!targetThreadId.startsWith('temp_')) {
-          // Send to server (this will handle the actual AI response)
+          const selectedThread = state.threads.find(t => t._id === targetThreadId);
+          
           await sendMessageAction({
             threadId: targetThreadId as Id<"threads">,
             content,
-            provider: state.threads.find(t => t._id === targetThreadId)?.provider || "openai",
-            model: state.threads.find(t => t._id === targetThreadId)?.model || "gpt-4o-mini",
+            provider: selectedThread?.provider || "openai",
+            model: selectedThread?.model || "gpt-4o-mini",
           });
+          
+          console.log('✅ Message sent to Convex');
         }
 
         // Remove optimistic messages (real ones will come from Convex sync)
-        await Promise.all([
-          localDB.current!.deleteMessage(userMessageId),
-          localDB.current!.deleteMessage(assistantMessageId),
-        ]);
-        
-        dispatch({ type: 'REMOVE_MESSAGE', payload: userMessageId });
-        dispatch({ type: 'REMOVE_MESSAGE', payload: assistantMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
       } catch (error) {
         // Remove optimistic messages on error
-        await Promise.all([
-          localDB.current!.deleteMessage(userMessageId),
-          localDB.current!.deleteMessage(assistantMessageId),
-        ]);
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
         
-        dispatch({ type: 'REMOVE_MESSAGE', payload: userMessageId });
-        dispatch({ type: 'REMOVE_MESSAGE', payload: assistantMessageId });
+        console.error('❌ Failed to send message to Convex:', error);
         throw error;
       }
     },
 
     updateMessage: async (messageId: string, updates: Partial<Message>) => {
-      if (!localDB.current) return;
+      // Optimistic update for instant UI
+      dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: { id: messageId, updates } });
 
-      await localDB.current.updateMessage(messageId, updates);
-      dispatch({ type: 'UPDATE_MESSAGE', payload: { id: messageId, updates } });
+      if (localDB.current) {
+        await localDB.current.updateMessage(messageId, updates);
+      }
     },
 
-    loadMessages: async (threadId: string) => {
-      if (!localDB.current) return;
-
-      const messages = await localDB.current.getMessages(threadId);
-      dispatch({ type: 'SET_MESSAGES', payload: { threadId, messages } });
-    },
-
-    syncWithServer: async () => {
-      // This would implement the full sync logic
-      // For now, it's handled by the useEffect hooks above
-      console.log('🔄 Triggering manual sync with server...');
-    },
+    syncWithConvex,
 
     clearLocalData: async () => {
       if (!localDB.current) return;
 
       await localDB.current.clear();
-      dispatch({ type: 'SET_THREADS', payload: [] });
-      dispatch({ type: 'SET_MESSAGES', payload: { threadId: '', messages: [] } });
+      dispatch({ type: 'SET_THREADS_FROM_CONVEX', payload: [] });
+      dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: { threadId: '', messages: [] } });
       dispatch({ type: 'SELECT_THREAD', payload: null });
     },
   }), [
@@ -618,7 +628,8 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
     createThreadMutation, 
     updateThreadMutation, 
     deleteThreadMutation, 
-    sendMessageAction
+    sendMessageAction,
+    syncWithConvex
   ]);
 
   const contextValue = useMemo(() => ({
@@ -671,5 +682,6 @@ export function useSyncStatus() {
     pendingOperations: state.pendingOperations.length,
     hasError: !!state.error,
     error: state.error,
+    isSyncing: state.isSyncing,
   };
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { useEnhancedSync, useThreads, useOnlineStatus, useSyncStatus } from "../lib/enhanced-sync-engine";
+import { useEnhancedSync, useThreads, useOnlineStatus, useSyncStatus } from "../lib/corrected-sync-engine";
 
 export function ThreadList() {
   const { state, actions } = useEnhancedSync();
@@ -138,10 +138,9 @@ export function ThreadList() {
                   animation: `fadeInUp 0.3s ease-out ${index * 50}ms both`
                 }}
               >
-                <button
-                  onClick={() => handleSelectThread(thread._id)}
+                <div
                   className={`
-                    w-full text-left p-3 rounded-lg transition-all duration-200 group
+                    w-full text-left p-3 rounded-lg transition-all duration-200 group cursor-pointer
                     border border-transparent hover:border-gray-200
                     ${state.selectedThreadId === thread._id
                       ? 'bg-blue-50 border-blue-200 shadow-sm' 
@@ -150,6 +149,7 @@ export function ThreadList() {
                     ${thread.isOptimistic ? 'opacity-70' : ''}
                     ${thread.hasLocalChanges ? 'border-l-4 border-l-blue-400' : ''}
                   `}
+                  onClick={() => handleSelectThread(thread._id)}
                 >
                   <div className="flex items-start gap-3">
                     {/* Thread Icon */}
@@ -188,9 +188,9 @@ export function ThreadList() {
                         )}
                       </div>
                       
-                      <p className="text-xs text-gray-500 truncate mb-2">
+                      <div className="text-xs text-gray-500 truncate mb-2">
                         {getThreadPreview(thread)}
-                      </p>
+                      </div>
                       
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-gray-400">
@@ -217,7 +217,7 @@ export function ThreadList() {
                       </svg>
                     </button>
                   </div>
-                </button>
+                </div>
               </div>
             ))}
           </div>

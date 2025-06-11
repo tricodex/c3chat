@@ -5,7 +5,7 @@ import { SignOutButton } from "./SignOutButton";
 import { Toaster } from "sonner";
 import { ChatInterface } from "./components/ChatInterface";
 import { ThreadList } from "./components/ThreadList";
-import { EnhancedSyncProvider, useEnhancedSync, useSyncStatus } from "./lib/enhanced-sync-engine";
+import { EnhancedSyncProvider, useEnhancedSync, useSyncStatus } from "./lib/corrected-sync-engine";
 
 export default function App() {
   return (
@@ -56,14 +56,14 @@ function AuthenticatedContent() {
   }
 
   return (
-    <div className="flex w-full h-full">
+    <div className="flex w-full h-[calc(100vh-4rem)]">
       {/* Sidebar */}
-      <div className="w-80 border-r bg-white">
+      <div className="w-80 border-r bg-white h-full">
         <ThreadList />
       </div>
       
       {/* Main Chat Area */}
-      <div className="flex-1">
+      <div className="flex-1 h-full">
         {state.selectedThreadId ? (
           <ChatInterface />
         ) : (
@@ -79,7 +79,7 @@ function AuthenticatedContent() {
               {/* Quick action button */}
               <button
                 onClick={() => actions.createThread()}
-                className="btn btn-primary"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
               >
                 Start New Chat
               </button>
@@ -140,10 +140,10 @@ function Content() {
           <h2 className="text-xl font-semibold text-primary">C3Chat</h2>
           <SignOutButton />
         </header>
-        <main className="flex-1 flex">
-          <EnhancedSyncProvider>
-            <AuthenticatedContent />
-          </EnhancedSyncProvider>
+        <main className="flex-1 flex min-h-0">
+        <EnhancedSyncProvider>
+        <AuthenticatedContent />
+        </EnhancedSyncProvider>
         </main>
       </Authenticated>
     </>
