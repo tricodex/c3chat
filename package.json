@@ -12,20 +12,28 @@
   "dependencies": {
     "@convex-dev/auth": "^0.0.80",
     "@google/genai": "^1.4.0",
+    "@tailwindcss/postcss": "^4.1.8",
     "clsx": "^2.1.1",
     "convex": "^1.24.2",
+    "nanoid": "^5.0.9",
     "openai": "^5.2.0",
+    "prismjs": "^1.29.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.0",
     "sonner": "^2.0.3",
-    "tailwind": "^4.0.0",
-    "tailwind-merge": "^3.1.0"
+    "tailwind-merge": "^3.1.0",
+    "tw-animate-css": "^1.3.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@types/node": "^22.13.10",
+    "@types/prismjs": "^1.26.5",
     "@types/react": "^19.1.7",
     "@types/react-dom": "^19.1.6",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "~10",
     "dotenv": "^16.4.7",
@@ -36,9 +44,12 @@
     "npm-run-all": "^4.1.5",
     "postcss": "~8",
     "prettier": "^3.5.3",
-    "tailwindcss": "~3.4.17",
-    "typescript": "~5.7.2",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3",
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0"
-  }
+  },
+  "trustedDependencies": [
+    "@tailwindcss/oxide"
+  ]
 }

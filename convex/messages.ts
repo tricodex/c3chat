@@ -1,4 +1,4 @@
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
@@ -71,12 +71,114 @@ export const updateContent = internalMutation({
     content: v.string(),
     isStreaming: v.optional(v.boolean()),
     cursor: v.optional(v.boolean()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    generatedImageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.messageId, {
+    const updates: any = {
       content: args.content,
-      isStreaming: args.isStreaming,
-      cursor: args.cursor,
+    };
+    
+    if (args.isStreaming !== undefined) updates.isStreaming = args.isStreaming;
+    if (args.cursor !== undefined) updates.cursor = args.cursor;
+    if (args.inputTokens !== undefined) updates.inputTokens = args.inputTokens;
+    if (args.outputTokens !== undefined) updates.outputTokens = args.outputTokens;
+    if (args.generatedImageUrl !== undefined) updates.generatedImageUrl = args.generatedImageUrl;
+    
+    await ctx.db.patch(args.messageId, updates);
+  },
+});
+
+// Get message by ID (internal use)
+export const getById = internalQuery({
+  args: {
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.messageId);
+  },
+});
+
+// Link attachment to message
+export const linkAttachment = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    attachmentId: v.id("attachments"),
+  },
+  handler: async (ctx, args) => {
+    // Verify attachment exists and update its messageId
+    const attachment = await ctx.db.get(args.attachmentId);
+    if (!attachment) {
+      throw new Error("Attachment not found");
+    }
+    
+    await ctx.db.patch(args.attachmentId, {
+      messageId: args.messageId,
     });
+  },
+});
+
+// Store web search results
+export const storeSearchResults = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    query: v.string(),
+    results: v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      favicon: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("searchResults", {
+      messageId: args.messageId,
+      query: args.query,
+      results: args.results,
+      searchedAt: Date.now(),
+    });
+  },
+});
+
+// Get message with attachments
+export const getWithAttachments = query({
+  args: {
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      return null;
+    }
+
+    // Verify user owns the thread
+    const thread = await ctx.db.get(message.threadId);
+    if (!thread || thread.userId !== userId) {
+      return null;
+    }
+
+    // Get attachments
+    const attachments = await ctx.db
+      .query("attachments")
+      .withIndex("by_message", (q) => q.eq("messageId", args.messageId))
+      .collect();
+
+    // Get search results if any
+    const searchResults = await ctx.db
+      .query("searchResults")
+      .withIndex("by_message", (q) => q.eq("messageId", args.messageId))
+      .first();
+
+    return {
+      ...message,
+      attachments,
+      searchResults,
+    };
   },
 });
