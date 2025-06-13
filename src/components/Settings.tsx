@@ -1,294 +1,377 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Button } from './ui/Button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
+import { Input } from './ui/Input';
+import { AI_PROVIDERS, COMPANY_LOGOS } from '../lib/ai-providers';
 import { toast } from 'sonner';
+import { Key, Settings as SettingsIcon, Info, X } from 'lucide-react';
 import { 
-  AI_PROVIDERS, 
-  type AIProvider,
-  getStoredApiKey, 
-  setStoredApiKey,
-  removeStoredApiKey,
-  hasValidApiKey,
-  getDefaultProvider,
-  setPreferredProvider,
-  setPreferredModel
-} from '../lib/ai-providers';
+  OpenAI, 
+  Anthropic, 
+  Gemini, 
+  DeepSeek, 
+  Mistral, 
+  Cohere, 
+  Meta,
+  Perplexity
+} from '@lobehub/icons';
 
-interface SettingsProps {
+interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function Settings({ isOpen, onClose }: SettingsProps) {
+// Professional AI Provider Logo Component using @lobehub/icons
+function CompanyLogo({ providerId, name, size = 20 }: { providerId?: string; name: string; size?: number }) {
+  const iconProps = { size, style: { width: size, height: size } };
+  
+  // Safely access .Color variants with fallbacks
+  const renderIcon = (IconComponent: any, fallbackGradient: string, fallbackText: string) => {
+    try {
+      if (IconComponent?.Color) {
+        return <IconComponent.Color {...iconProps} />;
+      } else if (IconComponent) {
+        return <IconComponent {...iconProps} />;
+      }
+    } catch (error) {
+      // Fallback if icon fails to render
+    }
+    return (
+      <div 
+        className={`rounded ${fallbackGradient} flex items-center justify-center text-white font-semibold`}
+        style={{ width: size, height: size, fontSize: size * 0.4 }}
+      >
+        {fallbackText}
+      </div>
+    );
+  };
+  
+  switch (providerId) {
+    case 'openai':
+      return renderIcon(OpenAI, 'bg-gradient-to-br from-emerald-500 to-teal-600', 'OAI');
+    case 'anthropic':
+      return renderIcon(Anthropic, 'bg-gradient-to-br from-orange-500 to-red-600', 'ANT');
+    case 'google':
+      return renderIcon(Gemini, 'bg-gradient-to-br from-blue-500 to-purple-600', 'GEM');
+    case 'deepseek':
+      return renderIcon(DeepSeek, 'bg-gradient-to-br from-indigo-500 to-blue-600', 'DS');
+    case 'mistral':
+      return renderIcon(Mistral, 'bg-gradient-to-br from-orange-500 to-amber-600', 'MIS');
+    case 'cohere':
+      return renderIcon(Cohere, 'bg-gradient-to-br from-coral-500 to-pink-600', 'COH');
+    case 'meta':
+      return renderIcon(Meta, 'bg-gradient-to-br from-blue-600 to-indigo-700', 'MET');
+    case 'perplexity':
+      return renderIcon(Perplexity, 'bg-gradient-to-br from-teal-500 to-cyan-600', 'PPL');
+    case 'reka':
+      // Reka doesn't have a lobehub icon, use professional fallback
+      return (
+        <div 
+          className="rounded bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white font-semibold"
+          style={{ width: size, height: size, fontSize: size * 0.4 }}
+        >
+          RK
+        </div>
+      );
+    case 'xai':
+      // XAI doesn't have a lobehub icon yet, use a fallback
+      return (
+        <div 
+          className="rounded bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-white font-semibold"
+          style={{ width: size, height: size, fontSize: size * 0.6 }}
+        >
+          X
+        </div>
+      );
+    case 'openrouter':
+      // OpenRouter doesn't have a lobehub icon, use professional fallback
+      return (
+        <div 
+          className="rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold"
+          style={{ width: size, height: size, fontSize: size * 0.4 }}
+        >
+          OR
+        </div>
+      );
+    default:
+      return (
+        <div 
+          className="rounded bg-gradient-to-br from-gray-500 to-gray-600 flex items-center justify-center text-white font-semibold"
+          style={{ width: size, height: size, fontSize: size * 0.6 }}
+        >
+          {name.charAt(0).toUpperCase()}
+        </div>
+      );
+  }
+}
+
+export function Settings({ isOpen, onClose }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'api-keys' | 'preferences' | 'about'>('api-keys');
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
   const [defaultProvider, setDefaultProvider] = useState<string>('');
-  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // Load current API keys
-      const keys: Record<string, string> = {};
-      Object.keys(AI_PROVIDERS).forEach(providerId => {
-        const key = getStoredApiKey(providerId);
-        if (key) keys[providerId] = key;
-      });
-      setApiKeys(keys);
-
-      // Load default provider
-      const defaultSelection = getDefaultProvider();
-      if (defaultSelection) {
-        setDefaultProvider(defaultSelection.providerId);
-      }
-
-      // Load theme preference
-      const savedTheme = localStorage.getItem('c3chat-theme') as 'light' | 'dark' | 'auto' || 'auto';
-      setTheme(savedTheme);
+      loadSettings();
     }
   }, [isOpen]);
 
-  const handleApiKeyChange = (providerId: string, value: string) => {
-    setApiKeys(prev => ({ ...prev, [providerId]: value }));
+  const loadSettings = () => {
+    // Load API keys from localStorage
+    const storedKeys: Record<string, string> = {};
+    Object.values(AI_PROVIDERS).forEach(provider => {
+      const key = localStorage.getItem(`apiKey_${provider.id}`);
+      if (key) storedKeys[provider.id] = key;
+    });
+    setApiKeys(storedKeys);
+
+    // Load default provider
+    const preferred = localStorage.getItem('preferredProvider') || '';
+    setDefaultProvider(preferred);
   };
 
-  const handleApiKeySave = (providerId: string) => {
-    const key = apiKeys[providerId]?.trim();
-    if (key) {
-      setStoredApiKey(providerId, key);
-      toast.success(`API key saved for ${AI_PROVIDERS[providerId].name}`);
+  const handleSaveApiKey = (providerId: string, apiKey: string) => {
+    if (apiKey.trim()) {
+      localStorage.setItem(`apiKey_${providerId}`, apiKey.trim());
+      setApiKeys(prev => ({ ...prev, [providerId]: apiKey.trim() }));
+      toast.success(`API key saved for ${AI_PROVIDERS[providerId]?.name}`);
     } else {
-      removeStoredApiKey(providerId);
-      toast.info(`API key removed for ${AI_PROVIDERS[providerId].name}`);
-    }
-  };
-
-  const toggleApiKeyVisibility = (providerId: string) => {
-    setShowApiKey(prev => ({ ...prev, [providerId]: !prev[providerId] }));
-  };
-
-  const handleDefaultProviderChange = (providerId: string) => {
-    setDefaultProvider(providerId);
-    setPreferredProvider(providerId);
-    
-    // Set default model for this provider
-    const provider = AI_PROVIDERS[providerId];
-    const defaultModel = provider.models.find(m => m.recommended)?.id || provider.models[0]?.id;
-    if (defaultModel) {
-      setPreferredModel(providerId, defaultModel);
-    }
-    
-    toast.success(`Default provider set to ${provider.name}`);
-  };
-
-  const handleThemeChange = (newTheme: 'light' | 'dark' | 'auto') => {
-    setTheme(newTheme);
-    localStorage.setItem('c3chat-theme', newTheme);
-    
-    // Apply theme immediately
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (newTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      // Auto theme
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-    
-    toast.success(`Theme changed to ${newTheme}`);
-  };
-
-  const clearAllData = () => {
-    if (confirm('Are you sure you want to clear all stored data? This will remove all API keys and preferences.')) {
-      // Clear API keys
-      Object.keys(AI_PROVIDERS).forEach(providerId => {
-        removeStoredApiKey(providerId);
+      localStorage.removeItem(`apiKey_${providerId}`);
+      setApiKeys(prev => {
+        const newKeys = { ...prev };
+        delete newKeys[providerId];
+        return newKeys;
       });
-      
-      // Clear preferences
-      localStorage.removeItem('c3chat-preferred-provider');
-      localStorage.removeItem('c3chat-preferred-models');
-      localStorage.removeItem('c3chat-theme');
-      
-      setApiKeys({});
-      setDefaultProvider('');
-      setTheme('auto');
-      
-      toast.success('All data cleared');
+      toast.success(`API key removed for ${AI_PROVIDERS[providerId]?.name}`);
+    }
+  };
+
+  const handleSetDefaultProvider = (providerId: string) => {
+    localStorage.setItem('preferredProvider', providerId);
+    setDefaultProvider(providerId);
+    toast.success(`Default provider set to ${AI_PROVIDERS[providerId]?.name}`);
+  };
+
+  const handleClearAllData = () => {
+    if (confirm('Are you sure? This will clear all API keys and preferences.')) {
+      setIsLoading(true);
+      try {
+        // Clear API keys
+        Object.keys(AI_PROVIDERS).forEach(providerId => {
+          localStorage.removeItem(`apiKey_${providerId}`);
+        });
+        localStorage.removeItem('preferredProvider');
+        localStorage.removeItem('preferredModel');
+
+        setApiKeys({});
+        setDefaultProvider('');
+        toast.success('All settings cleared');
+      } catch (error) {
+        toast.error('Failed to clear settings');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 c3-modal-overlay">
+      <div className="c3-glass-heavy rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-[var(--c3-border-subtle)] c3-animate-slide-up">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--c3-border-subtle)] bg-[var(--c3-bg-secondary)]">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Settings</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Configure your AI providers and preferences</p>
+            <h2 className="text-xl font-semibold text-[var(--c3-text-primary)]">Settings</h2>
+            <p className="text-sm text-[var(--c3-text-tertiary)] mt-0.5">Manage your AI providers and preferences</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} className="c3-button c3-button-ghost c3-button-icon" aria-label="Close settings">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="border-b border-[var(--c3-border-subtle)] bg-[var(--c3-bg-secondary)]">
+          <nav className="flex px-4">
+            {[
+              { id: 'api-keys', label: 'API Keys', icon: Key },
+              { id: 'preferences', label: 'Preferences', icon: SettingsIcon },
+              { id: 'about', label: 'About', icon: Info }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-[var(--c3-primary)] text-[var(--c3-primary)]'
+                    : 'border-transparent text-[var(--c3-text-tertiary)] hover:text-[var(--c3-text-primary)]'
+                }`}
+              >
+                <tab.icon className="w-4 h-4 mr-2 inline" />
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
         {/* Content */}
-        <div className="max-h-[calc(90vh-8rem)] overflow-y-auto">
-          <div className="p-6 space-y-8">
-            
-            {/* Theme Settings */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Appearance</h3>
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Theme
-                </label>
-                <div className="flex space-x-3">
-                  {(['light', 'dark', 'auto'] as const).map((themeOption) => (
-                    <button
-                      key={themeOption}
-                      onClick={() => handleThemeChange(themeOption)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        theme === themeOption
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {themeOption.charAt(0).toUpperCase() + themeOption.slice(1)}
-                    </button>
-                  ))}
-                </div>
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] bg-[var(--c3-bg-primary)] c3-scrollbar">
+          {activeTab === 'api-keys' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-medium text-[var(--c3-text-primary)] mb-3">API Keys</h3>
+                <p className="text-xs text-[var(--c3-text-tertiary)] mb-4">
+                  Enter your API keys to use the AI providers. Keys are stored locally in your browser.
+                </p>
               </div>
-            </section>
 
-            {/* Default Provider */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Default AI Provider</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {Object.values(AI_PROVIDERS).map((provider) => (
-                  <button
-                    key={provider.id}
-                    onClick={() => handleDefaultProviderChange(provider.id)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      defaultProvider === provider.id
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900 dark:text-white">{provider.name}</h4>
-                      {provider.featured && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                          Featured
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{provider.description}</p>
-                    <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                      {hasValidApiKey(provider.id) && (
-                        <span className="text-green-600 dark:text-green-400">✓ Configured</span>
-                      )}
-                      {provider.freeTier && <span>Free tier</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* API Keys */}
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">API Keys</h3>
-              <div className="space-y-4">
-                {Object.values(AI_PROVIDERS).map((provider) => (
-                  <div key={provider.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white">{provider.name}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{provider.description}</p>
-                        {provider.apiKeysUrl && (
-                          <a
-                            href={provider.apiKeysUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            Get API key →
-                          </a>
-                        )}
-                      </div>
+              <div className="grid gap-4">
+                {Object.values(AI_PROVIDERS).map(provider => (
+                  <div key={provider.id} className="p-4 c3-glass-card rounded-lg transition-all hover:transform hover:scale-[1.02]">
+                    <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2">
-                        {hasValidApiKey(provider.id) && (
-                          <span className="text-green-600 dark:text-green-400 text-sm">✓ Configured</span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex space-x-2">
-                      <div className="flex-1 relative">
-                        <input
-                          type={showApiKey[provider.id] ? 'text' : 'password'}
-                          value={apiKeys[provider.id] || ''}
-                          onChange={(e) => handleApiKeyChange(provider.id, e.target.value)}
-                          placeholder="Enter API key..."
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleApiKeyVisibility(provider.id)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                        >
-                          {showApiKey[provider.id] ? (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
+                        <CompanyLogo providerId={provider.id} name={provider.name} size={24} />
+                        <div>
+                          <h4 className="font-medium text-[var(--c3-text-primary)] text-sm">{provider.name}</h4>
+                          <p className="text-xs text-[var(--c3-text-tertiary)]">{provider.description}</p>
+                          {provider.freeTier && (
+                            <span className="c3-badge text-xs">
+                              Free tier available
+                            </span>
                           )}
-                        </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleApiKeySave(provider.id)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        Save
-                      </button>
+                      <div className="flex flex-col space-y-2 min-w-[240px]">
+                        <Input
+                          type="password"
+                          placeholder={`Enter ${provider.name} API key...`}
+                          value={apiKeys[provider.id] || ''}
+                          onChange={(e) => setApiKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                          className="text-xs h-8"
+                        />
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => handleSaveApiKey(provider.id, apiKeys[provider.id] || '')}
+                            disabled={!apiKeys[provider.id]?.trim()}
+                            className="c3-button c3-button-primary text-xs h-6 px-2"
+                          >
+                            Save
+                          </button>
+                          {apiKeys[provider.id] && (
+                            <button
+                              onClick={() => handleSaveApiKey(provider.id, '')}
+                              className="c3-button c3-button-ghost text-xs h-6 px-2"
+                            >
+                              Remove
+                            </button>
+                          )}
+                          <button
+                            onClick={() => window.open(provider.apiKeysUrl, '_blank')}
+                            className="c3-button c3-button-ghost text-xs h-6 px-2"
+                          >
+                            Get Key →
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
+          )}
 
-            {/* Danger Zone */}
-            <section>
-              <h3 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">Danger Zone</h3>
-              <div className="p-4 border border-red-200 dark:border-red-800 rounded-xl bg-red-50 dark:bg-red-900/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-red-800 dark:text-red-300">Clear All Data</h4>
-                    <p className="text-sm text-red-600 dark:text-red-400">Remove all API keys and preferences</p>
-                  </div>
-                  <button
-                    onClick={clearAllData}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                  >
-                    Clear All
-                  </button>
+          {activeTab === 'preferences' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-medium text-[var(--c3-text-primary)] mb-3">Preferences</h3>
+                <p className="text-xs text-[var(--c3-text-tertiary)] mb-4">
+                  Customize your chat experience and default settings.
+                </p>
+              </div>
+
+              <div className="p-4 c3-glass-card rounded-lg">
+                <h4 className="font-medium text-[var(--c3-text-primary)] mb-2 text-base">Default Provider</h4>
+                <p className="text-sm text-[var(--c3-text-tertiary)] mb-4">
+                  Choose which AI provider to use by default for new chats.
+                </p>
+                <div className="space-y-1">
+                  {Object.values(AI_PROVIDERS).filter(p => apiKeys[p.id]).map(provider => (
+                    <label key={provider.id} className="flex items-center space-x-2 p-2 rounded hover:bg-[var(--c3-surface-hover)] cursor-pointer">
+                      <input
+                        type="radio"
+                        name="defaultProvider"
+                        value={provider.id}
+                        checked={defaultProvider === provider.id}
+                        onChange={() => handleSetDefaultProvider(provider.id)}
+                        className="w-3 h-3 text-[var(--c3-primary)]"
+                      />
+                      <CompanyLogo providerId={provider.id} name={provider.name} size={16} />
+                      <span className="text-xs font-medium text-[var(--c3-text-primary)]">{provider.name}</span>
+                    </label>
+                  ))}
+                  {Object.values(AI_PROVIDERS).filter(p => apiKeys[p.id]).length === 0 && (
+                    <p className="text-xs text-[var(--c3-text-muted)] italic">Add API keys to see available providers</p>
+                  )}
                 </div>
               </div>
-            </section>
-          </div>
+
+              <div className="p-4 c3-glass-card rounded-lg">
+                <h4 className="font-medium text-[var(--c3-text-primary)] mb-2 text-base">Data Management</h4>
+                <p className="text-sm text-[var(--c3-text-tertiary)] mb-4">
+                  Manage your local application data and preferences.
+                </p>
+                <button
+                  onClick={handleClearAllData}
+                  disabled={isLoading}
+                  className="c3-button c3-button-secondary text-xs h-6 px-3 text-[var(--c3-error)] border-[var(--c3-error)]/20 hover:bg-[var(--c3-error)]/10"
+                >
+                  {isLoading ? 'Clearing...' : 'Clear All Settings'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'about' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-medium text-[var(--c3-text-primary)] mb-3">About C3Chat</h3>
+                <p className="text-xs text-[var(--c3-text-tertiary)] mb-4">
+                  A modern AI chat application with local-first architecture and real-time sync.
+                </p>
+              </div>
+
+              <div className="p-6 c3-premium-card rounded-lg">
+                <div className="text-center relative z-10">
+                  <h1 className="text-2xl font-bold c3-gradient-text mb-2">C3Chat</h1>
+                  <p className="text-[var(--c3-text-secondary)] mb-3 text-sm">AI-powered chat with multiple providers</p>
+                  <div className="flex justify-center space-x-3 text-xs text-[var(--c3-text-muted)]">
+                    <span>Version 1.0.0</span>
+                    <span>•</span>
+                    <span>Built with React & Convex</span>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-[var(--c3-border-subtle)]">
+                    <h4 className="font-medium text-[var(--c3-text-primary)] mb-2 text-sm">Supported Providers</h4>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {Object.values(AI_PROVIDERS).map(provider => (
+                        <div key={provider.id} className="flex items-center space-x-1 text-xs text-[var(--c3-text-secondary)]">
+                          <CompanyLogo providerId={provider.id} name={provider.name} size={14} />
+                          <span>{provider.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-[var(--c3-border-subtle)] p-4 bg-[var(--c3-bg-secondary)] flex justify-end">
+          <button onClick={onClose} className="c3-button c3-button-primary">
+            Close
+          </button>
         </div>
       </div>
     </div>

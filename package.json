@@ -16,9 +16,11 @@
   "dependencies": {
     "@convex-dev/auth": "^0.0.80",
     "@google/genai": "^1.4.0",
+    "@lobehub/icons": "^2.4.0",
     "@tailwindcss/postcss": "^4.1.8",
     "clsx": "^2.1.1",
     "convex": "^1.24.2",
+    "lucide-react": "^0.515.0",
     "nanoid": "^5.0.9",
     "openai": "^5.2.0",
     "prismjs": "^1.29.0",

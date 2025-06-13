@@ -1,0 +1,150 @@
+import { RefObject } from "react";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { Message } from "../lib/corrected-sync-engine";
+import { Id } from "../../convex/_generated/dataModel";
+import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock } from "lucide-react";
+import { OpenAI, Claude, Google, Perplexity, Cohere, Mistral, Baidu } from "@lobehub/icons";
+
+interface MessageListProps {
+  messages: Message[];
+  messagesEndRef: RefObject<HTMLDivElement>;
+  threadId: Id<"threads">;
+}
+
+// Provider icon mapping
+const providerIcons: Record<string, React.ComponentType<any>> = {
+  openai: OpenAI,
+  anthropic: Claude,
+  google: Google,
+  perplexity: Perplexity,
+  cohere: Cohere,
+  mistral: Mistral,
+  baidu: Baidu,
+};
+
+export function MessageList({ messages, messagesEndRef, threadId }: MessageListProps) {
+  if (messages.length === 0) {
+    return (
+      <div className="c3-messages c3-scrollbar">
+        <div className="flex flex-col items-center justify-center h-full text-center">
+          <div className="c3-empty-icon">
+            <MessageCircle className="w-10 h-10" style={{ color: 'var(--c3-text-muted)' }} />
+          </div>
+          <h3 className="text-base font-medium mt-3" style={{ color: 'var(--c3-text-secondary)' }}>
+            Start a new conversation
+          </h3>
+          <p className="text-xs mt-1" style={{ color: 'var(--c3-text-tertiary)' }}>
+            Ask me anything or try one of these suggestions
+          </p>
+          
+          {/* Quick action suggestions - Compact */}
+          <div className="mt-6 grid gap-2 max-w-md">
+            <button className="c3-suggestion-card">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--c3-primary)' }} />
+              <span className="c3-suggestion-text">Generate creative content</span>
+            </button>
+            <button className="c3-suggestion-card">
+              <Globe className="w-4 h-4" style={{ color: 'var(--c3-primary)' }} />
+              <span className="c3-suggestion-text">Search real-time information</span>
+            </button>
+            <button className="c3-suggestion-card">
+              <Brain className="w-4 h-4" style={{ color: 'var(--c3-primary)' }} />
+              <span className="c3-suggestion-text">Analyze complex topics</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="c3-messages c3-scrollbar">
+      {messages.map((message) => {
+        // Get provider icon for assistant messages
+        const ProviderIcon = message.role === "assistant" && message.provider 
+          ? providerIcons[message.provider] || Bot 
+          : null;
+        
+        return (
+          <div
+            key={message._id}
+            className={`c3-message ${message.role} ${message.isOptimistic ? 'optimistic' : ''}`}
+          >
+            {/* Avatar */}
+            <div className="c3-message-avatar">
+              {message.role === "user" ? (
+                <User className="w-4 h-4" />
+              ) : (
+                ProviderIcon ? <ProviderIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />
+              )}
+            </div>
+
+          {/* Message Content */}
+          <div className="c3-message-content">
+            {/* Status Indicators */}
+            {message.isOptimistic && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[var(--c3-primary)] rounded-full animate-pulse" title="Sending..." />
+            )}
+            {message.hasLocalChanges && !message.isOptimistic && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[var(--c3-warning)] rounded-full" title="Syncing..." />
+            )}
+
+            {/* Content */}
+            {message.role === "assistant" ? (
+              <>
+                {message.isStreaming && !message.content ? (
+                  <div className="c3-typing-indicator">
+                    <div className="c3-typing-dot" />
+                    <div className="c3-typing-dot" />
+                    <div className="c3-typing-dot" />
+                  </div>
+                ) : (
+                  <>
+                    <MarkdownRenderer content={message.content} />
+                    {message.cursor && (
+                      <span className="c3-cursor" />
+                    )}
+                  </>
+                )}
+                
+                {/* Generated Image */}
+                {message.generatedImageUrl && (
+                  <div className="mt-3">
+                    <img 
+                      src={message.generatedImageUrl} 
+                      alt="Generated" 
+                      className="rounded-lg max-w-full shadow-lg"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="whitespace-pre-wrap">{message.content}</div>
+            )}
+            
+            {/* Metadata - Compact */}
+            {(message.outputTokens || message.createdAt) && (
+              <div className="flex items-center gap-3 text-[10px] mt-2" style={{ color: 'var(--c3-text-muted)' }}>
+                {message.outputTokens && (
+                  <span className="flex items-center gap-1">
+                    <Hash className="w-2.5 h-2.5" />
+                    {message.outputTokens}
+                  </span>
+                )}
+                {message.createdAt && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5" />
+                    {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        );
+      })}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+}

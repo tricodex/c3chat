@@ -15,6 +15,7 @@ export interface AIProvider {
   freeTier?: boolean;
   popular?: boolean;
   featured?: boolean;
+  logo?: string; // SVG logo component
 }
 
 export interface AIModel {
@@ -31,12 +32,26 @@ export interface AIModel {
   maxOutputTokens?: number;
 }
 
+// Company Logo identifiers for simple string-based rendering
+export const COMPANY_LOGOS = {
+  openai: 'openai-logo',
+  anthropic: 'anthropic-logo', 
+  google: 'google-logo',
+  meta: 'meta-logo',
+  mistral: 'mistral-logo',
+  deepseek: 'deepseek-logo',
+  xai: 'xai-logo',
+  perplexity: 'perplexity-logo',
+  cohere: 'cohere-logo',
+  reka: 'reka-logo'
+} as const;
+
 // Supported AI Providers - NO DEFAULT SELECTION
 export const AI_PROVIDERS: Record<string, AIProvider> = {
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",
-    description: "Access 100+ models from multiple providers with unified pricing",
+    description: "Access 200+ models from multiple providers with unified pricing",
     baseURL: "https://openrouter.ai/api/v1",
     requiresApiKey: true,
     supportsStreaming: true,
@@ -48,6 +63,7 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     freeTier: true,
     popular: true,
     featured: true,
+    logo: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
     models: [
       {
         id: "auto",
@@ -56,6 +72,14 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         description: "Automatically selects the best model for your prompt",
         recommended: true,
         strengths: ["Smart routing", "Cost-effective", "Reliable"],
+      },
+      {
+        id: "openai/gpt-5",
+        name: "GPT-5",
+        contextLength: 200000,
+        description: "OpenAI's newest flagship model with advanced reasoning",
+        pricing: { inputPer1M: 10, outputPer1M: 40 },
+        strengths: ["Advanced reasoning", "Vision", "Tool use", "Latest knowledge"],
       },
       {
         id: "openai/gpt-4o",
@@ -78,31 +102,40 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         id: "anthropic/claude-4-opus",
         name: "Claude 4 Opus",
         contextLength: 200000,
-        description: "Anthropic's most powerful model",
+        description: "Anthropic's most powerful model with extended thinking",
         pricing: { inputPer1M: 15, outputPer1M: 75 },
-        strengths: ["Creative writing", "Complex reasoning", "Analysis"],
+        strengths: ["Creative writing", "Complex reasoning", "Coding"],
       },
       {
-        id: "google/gemini-2.0-pro",
-        name: "Gemini 2.0 Pro",
+        id: "anthropic/claude-4-sonnet",
+        name: "Claude 4 Sonnet",
+        contextLength: 200000,
+        description: "Balanced Claude 4 model for everyday use",
+        pricing: { inputPer1M: 3, outputPer1M: 15 },
+        strengths: ["Balanced performance", "Analysis", "Writing"],
+        recommended: true,
+      },
+      {
+        id: "google/gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
         contextLength: 1000000,
-        description: "Google's multimodal model with huge context",
+        description: "Google's latest multimodal model with huge context",
         pricing: { inputPer1M: 1.25, outputPer1M: 5 },
         strengths: ["Long context", "Multimodal", "Code generation"],
       },
       {
-        id: "meta-llama/llama-3.3-70b-instruct",
-        name: "Llama 3.3 70B",
-        contextLength: 128000,
-        description: "Meta's open-source powerhouse",
+        id: "meta-llama/llama-4-maverick",
+        name: "Llama 4 Maverick",
+        contextLength: 1000000,
+        description: "Meta's latest open-source powerhouse",
         pricing: { inputPer1M: 0.5, outputPer1M: 0.75 },
-        strengths: ["Open source", "Coding", "Math"],
+        strengths: ["Open source", "Coding", "Math", "Long context"],
       },
       {
         id: "deepseek/deepseek-r1",
         name: "DeepSeek R1",
         contextLength: 128000,
-        description: "Cutting-edge reasoning model",
+        description: "Advanced reasoning model with thinking capability",
         pricing: { inputPer1M: 0.55, outputPer1M: 2.19 },
         strengths: ["Reasoning", "Problem solving", "Research"],
       },
@@ -122,7 +155,27 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     websiteUrl: "https://openai.com",
     apiKeysUrl: "https://platform.openai.com/api-keys",
     popular: true,
+    logo: COMPANY_LOGOS.openai,
     models: [
+      {
+        id: "gpt-5",
+        name: "GPT-5",
+        contextLength: 200000,
+        description: "OpenAI's newest flagship model with advanced reasoning capabilities",
+        pricing: { inputPer1M: 10, outputPer1M: 40 },
+        strengths: ["Advanced reasoning", "Vision", "Complex tasks", "Latest knowledge"],
+        recommended: true,
+        maxOutputTokens: 32768,
+      },
+      {
+        id: "o4-mini",
+        name: "o4 Mini",
+        contextLength: 200000,
+        description: "Compact reasoning model with excellent performance",
+        pricing: { inputPer1M: 3, outputPer1M: 12 },
+        strengths: ["Reasoning", "Math", "Science", "Cost-effective"],
+        maxOutputTokens: 16384,
+      },
       {
         id: "gpt-4o",
         name: "GPT-4o",
@@ -139,17 +192,7 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         description: "Fast and affordable for most tasks",
         pricing: { inputPer1M: 0.15, outputPer1M: 0.6 },
         strengths: ["Speed", "Cost-effective", "General use"],
-        recommended: true,
         maxOutputTokens: 16384,
-      },
-      {
-        id: "gpt-3.5-turbo",
-        name: "GPT-3.5 Turbo",
-        contextLength: 16385,
-        description: "Fast and reliable for simple tasks",
-        pricing: { inputPer1M: 0.5, outputPer1M: 1.5 },
-        strengths: ["Speed", "Simple tasks", "Legacy support"],
-        maxOutputTokens: 4096,
       },
     ],
   },
@@ -167,34 +210,45 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     websiteUrl: "https://anthropic.com",
     apiKeysUrl: "https://console.anthropic.com/account/keys",
     popular: true,
+    logo: COMPANY_LOGOS.anthropic,
     models: [
       {
-        id: "claude-4-opus-20250514",
+        id: "claude-4-opus",
         name: "Claude 4 Opus",
         contextLength: 200000,
-        description: "Most powerful Claude model for complex tasks",
+        description: "Most powerful Claude model with extended thinking",
         pricing: { inputPer1M: 15, outputPer1M: 75 },
-        strengths: ["Creative writing", "Complex reasoning", "Research"],
-        maxOutputTokens: 8192,
+        strengths: ["Creative writing", "Complex reasoning", "Research", "Coding"],
+        recommended: true,
+        maxOutputTokens: 32000,
       },
       {
-        id: "claude-4-sonnet-20250514",
-        name: "Claude 4 Sonnet", 
+        id: "claude-4-sonnet", 
+        name: "Claude 4 Sonnet",
         contextLength: 200000,
-        description: "Balanced performance and cost",
+        description: "Balanced performance and cost with superior capabilities",
+        pricing: { inputPer1M: 3, outputPer1M: 15 },
+        strengths: ["Balanced", "Analysis", "Writing", "Coding"],
+        recommended: true,
+        maxOutputTokens: 32000,
+      },
+      {
+        id: "claude-3.7-sonnet",
+        name: "Claude 3.7 Sonnet",
+        contextLength: 200000,
+        description: "Enhanced version of Claude 3.5 with better performance",
         pricing: { inputPer1M: 3, outputPer1M: 15 },
         strengths: ["Balanced", "Analysis", "Writing"],
-        recommended: true,
         maxOutputTokens: 8192,
       },
       {
-        id: "claude-3-haiku-20240307",
-        name: "Claude 3 Haiku",
+        id: "claude-3.5-haiku",
+        name: "Claude 3.5 Haiku",
         contextLength: 200000,
-        description: "Fastest Claude model",
+        description: "Fastest Claude model for quick tasks",
         pricing: { inputPer1M: 0.25, outputPer1M: 1.25 },
         strengths: ["Speed", "Simple tasks", "Cost-effective"],
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       },
     ],
   },
@@ -212,14 +266,26 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     websiteUrl: "https://ai.google.dev",
     apiKeysUrl: "https://makersuite.google.com/app/apikey",
     freeTier: true,
+    logo: COMPANY_LOGOS.google,
     models: [
       {
         id: "gemini-2.5-pro",
         name: "Gemini 2.5 Pro",
         contextLength: 1000000,
-        description: "Multimodal model with 1M context window",
+        description: "Latest multimodal model with 1M context window",
         pricing: { inputPer1M: 1.25, outputPer1M: 5 },
-        strengths: ["Long context", "Multimodal", "Analysis"],
+        strengths: ["Long context", "Multimodal", "Analysis", "Reasoning"],
+        recommended: true,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        contextLength: 1000000,
+        description: "Fast multimodal model with huge context and reasoning",
+        pricing: { inputPer1M: 0.075, outputPer1M: 0.3 },
+        strengths: ["Speed", "Long context", "Multimodal", "Reasoning"],
+        recommended: true,
         maxOutputTokens: 8192,
       },
       {
@@ -229,11 +295,287 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         description: "Fast multimodal model with huge context",
         pricing: { inputPer1M: 0.075, outputPer1M: 0.3 },
         strengths: ["Speed", "Long context", "Multimodal"],
-        recommended: true,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "gemini-1.5-pro",
+        name: "Gemini 1.5 Pro",
+        contextLength: 2000000,
+        description: "Multimodal model with 2M context window",
+        pricing: { inputPer1M: 1.25, outputPer1M: 5 },
+        strengths: ["Long context", "Multimodal", "Analysis"],
         maxOutputTokens: 8192,
       },
     ],
   },
+
+  deepseek: {
+    id: "deepseek",
+    name: "DeepSeek",
+    description: "Advanced reasoning models with excellent performance",
+    baseURL: "https://api.deepseek.com/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsImages: false,
+    supportsWebSearch: false,
+    websiteUrl: "https://deepseek.com",
+    apiKeysUrl: "https://platform.deepseek.com/api_keys",
+    popular: true,
+    logo: COMPANY_LOGOS.deepseek,
+    models: [
+      {
+        id: "deepseek-r1",
+        name: "DeepSeek R1",
+        contextLength: 128000,
+        description: "Advanced reasoning model with thinking capability",
+        pricing: { inputPer1M: 0.55, outputPer1M: 2.19 },
+        strengths: ["Reasoning", "Problem solving", "Research"],
+        recommended: true,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "deepseek-v3",
+        name: "DeepSeek V3",
+        contextLength: 128000,
+        description: "Powerful general-purpose model",
+        pricing: { inputPer1M: 0.27, outputPer1M: 1.1 },
+        strengths: ["General tasks", "Coding", "Analysis"],
+        maxOutputTokens: 8192,
+      },
+    ],
+  },
+
+  xai: {
+    id: "xai",
+    name: "xAI",
+    description: "Elon Musk's AI company with Grok models",
+    baseURL: "https://api.x.ai/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsImages: true,
+    supportsWebSearch: true,
+    websiteUrl: "https://x.ai",
+    apiKeysUrl: "https://console.x.ai",
+    logo: COMPANY_LOGOS.xai,
+    models: [
+      {
+        id: "grok-3",
+        name: "Grok 3",
+        contextLength: 1000000,
+        description: "Latest Grok model with massive context and real-time data",
+        pricing: { inputPer1M: 2, outputPer1M: 8 },
+        strengths: ["Real-time data", "Long context", "Current events"],
+        recommended: true,
+        maxOutputTokens: 32000,
+      },
+      {
+        id: "grok-3-mini",
+        name: "Grok 3 Mini",
+        contextLength: 1000000,
+        description: "Compact Grok model with reasoning capabilities",
+        pricing: { inputPer1M: 0.5, outputPer1M: 2 },
+        strengths: ["Reasoning", "Speed", "Cost-effective"],
+        maxOutputTokens: 16000,
+      },
+    ],
+  },
+
+  meta: {
+    id: "meta",
+    name: "Meta AI",
+    description: "Open-source Llama models for various applications",
+    baseURL: "https://api.together.xyz/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsImages: true,
+    supportsWebSearch: false,
+    websiteUrl: "https://ai.meta.com",
+    apiKeysUrl: "https://api.together.xyz/settings/api-keys",
+    freeTier: true,
+    logo: COMPANY_LOGOS.meta,
+    models: [
+      {
+        id: "meta-llama/llama-4-maverick",
+        name: "Llama 4 Maverick",
+        contextLength: 1000000,
+        description: "Meta's latest open-source powerhouse with massive context",
+        pricing: { inputPer1M: 0.5, outputPer1M: 0.75 },
+        strengths: ["Open source", "Coding", "Math", "Long context"],
+        recommended: true,
+        maxOutputTokens: 32000,
+      },
+      {
+        id: "meta-llama/llama-4-scout",
+        name: "Llama 4 Scout",
+        contextLength: 10000000,
+        description: "Ultra-long context model for massive document processing",
+        pricing: { inputPer1M: 1, outputPer1M: 1.5 },
+        strengths: ["Ultra-long context", "Document analysis", "Research"],
+        maxOutputTokens: 32000,
+      },
+      {
+        id: "meta-llama/llama-3.3-70b-instruct",
+        name: "Llama 3.3 70B",
+        contextLength: 128000,
+        description: "Powerful open-source model for general use",
+        pricing: { inputPer1M: 0.5, outputPer1M: 0.75 },
+        strengths: ["Open source", "Coding", "Math"],
+        maxOutputTokens: 8192,
+      },
+    ],
+  },
+
+  mistral: {
+    id: "mistral",
+    name: "Mistral AI",
+    description: "European AI company with efficient and powerful models",
+    baseURL: "https://api.mistral.ai/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsImages: false,
+    supportsWebSearch: false,
+    websiteUrl: "https://mistral.ai",
+    apiKeysUrl: "https://console.mistral.ai",
+    logo: COMPANY_LOGOS.mistral,
+    models: [
+      {
+        id: "mistral-large-2",
+        name: "Mistral Large 2",
+        contextLength: 128000,
+        description: "Mistral's most capable model for complex tasks",
+        pricing: { inputPer1M: 2, outputPer1M: 6 },
+        strengths: ["Reasoning", "Coding", "Multilingual"],
+        recommended: true,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "mistral-medium-3",
+        name: "Mistral Medium 3",
+        contextLength: 128000,
+        description: "Balanced model for everyday tasks",
+        pricing: { inputPer1M: 0.7, outputPer1M: 2.1 },
+        strengths: ["Balanced", "General purpose", "Cost-effective"],
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "codestral",
+        name: "Codestral",
+        contextLength: 256000,
+        description: "Specialized coding model with massive context",
+        pricing: { inputPer1M: 0.2, outputPer1M: 0.6 },
+        strengths: ["Coding", "Long context", "Code generation"],
+        maxOutputTokens: 8192,
+      },
+    ],
+  },
+
+  perplexity: {
+    id: "perplexity",
+    name: "Perplexity",
+    description: "AI-powered search and reasoning platform",
+    baseURL: "https://api.perplexity.ai",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsWebSearch: true,
+    websiteUrl: "https://perplexity.ai",
+    apiKeysUrl: "https://perplexity.ai/settings/api",
+    freeTier: true,
+    logo: COMPANY_LOGOS.perplexity,
+    models: [
+      {
+        id: "llama-3.1-sonar-large-128k-online",
+        name: "Sonar Large Online",
+        contextLength: 127072,
+        maxOutputTokens: 4096,
+        description: "Real-time web search with reasoning",
+        pricing: { inputPer1M: 1.00, outputPer1M: 1.00 },
+        strengths: ["Real-time search", "Factual", "Citations"],
+        recommended: true
+      },
+      {
+        id: "llama-3.1-sonar-small-128k-online",
+        name: "Sonar Small Online",
+        contextLength: 127072,
+        maxOutputTokens: 4096,
+        description: "Fast web search model",
+        pricing: { inputPer1M: 0.20, outputPer1M: 0.20 },
+        strengths: ["Speed", "Web search", "Cost-effective"]
+      }
+    ]
+  },
+
+  cohere: {
+    id: "cohere",
+    name: "Cohere",
+    description: "Enterprise-focused language models",
+    baseURL: "https://api.cohere.com/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsTools: true,
+    websiteUrl: "https://cohere.com",
+    apiKeysUrl: "https://dashboard.cohere.com/api-keys",
+    freeTier: true,
+    logo: COMPANY_LOGOS.cohere,
+    models: [
+      {
+        id: "command-r-plus",
+        name: "Command R+",
+        contextLength: 128000,
+        maxOutputTokens: 4096,
+        description: "Most capable model for complex tasks",
+        pricing: { inputPer1M: 3.00, outputPer1M: 15.00 },
+        strengths: ["RAG", "Tool use", "Multilingual"],
+        recommended: true
+      },
+      {
+        id: "command-r",
+        name: "Command R",
+        contextLength: 128000,
+        maxOutputTokens: 4096,
+        description: "Balanced model for everyday tasks",
+        pricing: { inputPer1M: 0.50, outputPer1M: 1.50 },
+        strengths: ["RAG", "Balanced", "Enterprise"]
+      }
+    ]
+  },
+
+  reka: {
+    id: "reka",
+    name: "Reka AI",
+    description: "Multimodal AI models built by ex-Google researchers",
+    baseURL: "https://api.reka.ai/v1",
+    requiresApiKey: true,
+    supportsStreaming: true,
+    supportsImages: true,
+    websiteUrl: "https://reka.ai",
+    apiKeysUrl: "https://platform.reka.ai",
+    logo: COMPANY_LOGOS.reka,
+    models: [
+      {
+        id: "reka-core",
+        name: "Reka Core",
+        contextLength: 128000,
+        maxOutputTokens: 8192,
+        description: "Flagship multimodal model",
+        pricing: { inputPer1M: 10.00, outputPer1M: 25.00 },
+        strengths: ["Multimodal", "Video understanding", "Research"],
+        recommended: true
+      },
+      {
+        id: "reka-flash",
+        name: "Reka Flash",
+        contextLength: 128000,
+        maxOutputTokens: 8192,
+        description: "Fast and efficient multimodal model",
+        pricing: { inputPer1M: 0.80, outputPer1M: 2.00 },
+        strengths: ["Speed", "Multimodal", "Cost-effective"]
+      }
+    ]
+  }
 };
 
 // Web Search Providers
@@ -376,11 +718,12 @@ export function getRecommendedModels(): Array<{ provider: AIProvider; model: AIM
 
 // Provider categorization
 export function getProvidersByCategory() {
-  const featured = Object.values(AI_PROVIDERS).filter(p => p.featured);
-  const popular = Object.values(AI_PROVIDERS).filter(p => p.popular && !p.featured);
-  const others = Object.values(AI_PROVIDERS).filter(p => !p.popular && !p.featured);
-  
-  return { featured, popular, others };
+  const providers = Object.values(AI_PROVIDERS);
+  return {
+    featured: providers.filter(p => p.featured),
+    popular: providers.filter(p => p.popular && !p.featured),
+    others: providers.filter(p => !p.popular && !p.featured),
+  };
 }
 
 // Model comparison helpers

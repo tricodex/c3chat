@@ -1,105 +1,111 @@
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import remarkGfm from 'remark-gfm';
-import { cn } from '../lib/utils';
+import { memo } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { CodeBlock } from "./CodeBlock";
 
 interface MarkdownRendererProps {
   content: string;
-  className?: string;
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
+      className="c3-markdown"
       remarkPlugins={[remarkGfm]}
-      className={cn("prose prose-gray dark:prose-invert max-w-none", className)}
       components={{
-        code({ node, inline, className, children, ...props }) {
+        // Code blocks with syntax highlighting
+        code({ node, inline, className, children, ...props }: any) {
           const match = /language-(\w+)/.exec(className || '');
           const language = match ? match[1] : '';
-          const codeString = String(children).replace(/\n$/, '');
           
-          return !inline ? (
-            <div className="relative group">
-              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => navigator.clipboard.writeText(codeString)}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded"
-                >
-                  Copy
-                </button>
-              </div>
-              {language && (
-                <div className="text-xs text-gray-400 bg-gray-800 px-3 py-1 rounded-t-md">
-                  {language}
-                </div>
-              )}
-              <SyntaxHighlighter
-                style={oneDark}
-                language={language || 'text'}
-                PreTag="div"
-                customStyle={{
-                  margin: 0,
-                  borderTopLeftRadius: language ? 0 : undefined,
-                  borderTopRightRadius: language ? 0 : undefined,
-                }}
-                {...props}
-              >
-                {codeString}
-              </SyntaxHighlighter>
-            </div>
+          return !inline && language ? (
+            <CodeBlock language={language}>
+              {String(children).replace(/\n$/, '')}
+            </CodeBlock>
           ) : (
-            <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm" {...props}>
+            <code className="c3-inline-code" {...props}>
               {children}
             </code>
           );
         },
-        // Custom link renderer
-        a({ href, children }) {
+        // Links open in new tab with icon
+        a({ href, children }: any) {
+          const isExternal = href?.startsWith('http');
           return (
             <a
               href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
+              target={isExternal ? "_blank" : undefined}
+              rel={isExternal ? "noopener noreferrer" : undefined}
+              className="c3-link inline-flex items-center gap-0.5"
             >
               {children}
+              {isExternal && (
+                <svg
+                  className="inline-block w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
+                </svg>
+              )}
             </a>
           );
         },
-        // Custom table renderer
+        // Tables with better styling
         table({ children }) {
           return (
-            <div className="overflow-x-auto my-4">
-              <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
-                {children}
-              </table>
+            <div className="c3-table-wrapper">
+              <table className="c3-table">{children}</table>
             </div>
           );
         },
-        // Custom image renderer
-        img({ src, alt }) {
-          return (
-            <img
-              src={src}
-              alt={alt || ''}
-              className="max-w-full h-auto rounded-lg shadow-md"
-              loading="lazy"
-            />
-          );
-        },
-        // Custom blockquote renderer
+        // Blockquotes
         blockquote({ children }) {
-          return (
-            <blockquote className="border-l-4 border-blue-500 pl-4 my-4 italic text-gray-700 dark:text-gray-300">
-              {children}
-            </blockquote>
-          );
+          return <blockquote className="c3-blockquote">{children}</blockquote>;
+        },
+        // Lists
+        ul({ children }) {
+          return <ul className="c3-list">{children}</ul>;
+        },
+        ol({ children }) {
+          return <ol className="c3-list c3-list-ordered">{children}</ol>;
+        },
+        // Headings
+        h1({ children }) {
+          return <h1 className="c3-heading c3-h1">{children}</h1>;
+        },
+        h2({ children }) {
+          return <h2 className="c3-heading c3-h2">{children}</h2>;
+        },
+        h3({ children }) {
+          return <h3 className="c3-heading c3-h3">{children}</h3>;
+        },
+        h4({ children }) {
+          return <h4 className="c3-heading c3-h4">{children}</h4>;
+        },
+        h5({ children }) {
+          return <h5 className="c3-heading c3-h5">{children}</h5>;
+        },
+        h6({ children }) {
+          return <h6 className="c3-heading c3-h6">{children}</h6>;
+        },
+        // Paragraphs
+        p({ children }) {
+          return <p className="c3-paragraph">{children}</p>;
+        },
+        // Horizontal rules
+        hr() {
+          return <hr className="c3-divider" />;
         },
       }}
     >
       {content}
     </ReactMarkdown>
   );
-}
+});
