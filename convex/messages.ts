@@ -130,13 +130,14 @@ export const storeSearchResults = internalMutation({
       snippet: v.string(),
       favicon: v.optional(v.string()),
     })),
+    searchedAt: v.number(),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("searchResults", {
       messageId: args.messageId,
       query: args.query,
       results: args.results,
-      searchedAt: Date.now(),
+      searchedAt: args.searchedAt,
     });
   },
 });

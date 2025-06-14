@@ -14,11 +14,15 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as ai from "../ai.js";
+import type * as analytics from "../analytics.js";
 import type * as attachments from "../attachments.js";
 import type * as auth from "../auth.js";
 import type * as chat from "../chat.js";
 import type * as http from "../http.js";
+import type * as knowledgeBase from "../knowledgeBase.js";
 import type * as messages from "../messages.js";
+import type * as projects from "../projects.js";
+import type * as promptTemplates from "../promptTemplates.js";
 import type * as router from "../router.js";
 import type * as threads from "../threads.js";
 import type * as userSettings from "../userSettings.js";
@@ -33,11 +37,15 @@ import type * as userSettings from "../userSettings.js";
  */
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  analytics: typeof analytics;
   attachments: typeof attachments;
   auth: typeof auth;
   chat: typeof chat;
   http: typeof http;
+  knowledgeBase: typeof knowledgeBase;
   messages: typeof messages;
+  projects: typeof projects;
+  promptTemplates: typeof promptTemplates;
   router: typeof router;
   threads: typeof threads;
   userSettings: typeof userSettings;

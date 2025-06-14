@@ -9,10 +9,10 @@ interface MarkdownRendererProps {
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <ReactMarkdown
-      className="c3-markdown"
-      remarkPlugins={[remarkGfm]}
-      components={{
+    <div className="c3-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
         // Code blocks with syntax highlighting
         code({ node, inline, className, children, ...props }: any) {
           const match = /language-(\w+)/.exec(className || '');
@@ -103,9 +103,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: Mark
         hr() {
           return <hr className="c3-divider" />;
         },
-      }}
-    >
-      {content}
-    </ReactMarkdown>
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 });

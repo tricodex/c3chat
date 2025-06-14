@@ -11,7 +11,7 @@ import { Header } from "./components/Header";
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open on desktop
 
   useEffect(() => {
     // Apply theme to document
@@ -85,22 +85,35 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }) {
+  // Desktop sidebar is collapsed when sidebarOpen is false
+  // Mobile sidebar is shown as overlay when sidebarOpen is true
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div className="c3-layout">
       {/* Mobile Overlay */}
-      {sidebarOpen && (
+      {isMobile && sidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-30 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       
-      {/* Sidebar */}
+      {/* Sidebar - On desktop, collapsed class is applied when !sidebarOpen */}
       <Sidebar 
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         theme={theme}
         setTheme={setTheme}
+        isCollapsed={!isMobile && !sidebarOpen}
       />
       
       {/* Main Content */}

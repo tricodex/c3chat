@@ -9,11 +9,11 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
 
   return (
     <header className="c3-header">
-      {/* Mobile Menu Button */}
+      {/* Sidebar Toggle Button - Now visible on all screens */}
       <button
         onClick={onMenuClick}
-        className="c3-button c3-button-ghost c3-button-icon md:hidden mr-3"
-        aria-label="Toggle menu"
+        className="c3-button c3-button-ghost c3-button-icon mr-3"
+        aria-label="Toggle sidebar"
       >
         <Menu className="w-5 h-5" />
       </button>

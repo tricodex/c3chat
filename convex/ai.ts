@@ -366,47 +366,140 @@ export const generateImage = action({
   },
 });
 
-// Web search action
-export const searchWeb = internalAction({
+// Enhanced message sending with web search and knowledge base
+export const sendMessageWithContext = action({
   args: {
-    query: v.string(),
-    messageId: v.id("messages"),
+    threadId: v.id("threads"),
+    content: v.string(),
+    provider: v.string(),
+    model: v.string(),
+    apiKey: v.optional(v.string()),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
+    systemPrompt: v.optional(v.string()),
+    // Enhanced features
+    enableWebSearch: v.optional(v.boolean()),
+    searchQueries: v.optional(v.array(v.string())),
+    useKnowledgeBase: v.optional(v.boolean()),
+    projectId: v.optional(v.id("projects")),
   },
+  returns: v.object({ 
+    success: v.boolean(), 
+    messageId: v.id("messages"),
+    searchResults: v.optional(v.array(v.object({
+      query: v.string(),
+      results: v.array(v.object({
+        title: v.string(),
+        url: v.string(),
+        snippet: v.string(),
+      })),
+    }))),
+  }),
   handler: async (ctx, args) => {
-    const apiKey = process.env.CONVEX_BRAVE_SEARCH_API_KEY;
-    if (!apiKey) throw new Error("Brave Search API key not configured");
+    let enhancedSystemPrompt = args.systemPrompt || "";
+    let searchResults = [];
 
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(args.query)}`,
-      {
-        headers: {
-          "Accept": "application/json",
-          "X-Subscription-Token": apiKey,
-        },
+    // Perform web searches if enabled
+    if (args.enableWebSearch && args.searchQueries && args.searchQueries.length > 0) {
+      for (const query of args.searchQueries) {
+        try {
+          const results = await searchWeb(query);
+          searchResults.push({ query, results });
+          
+          // Add search results to context
+          enhancedSystemPrompt += `\n\nWeb Search Results for "${query}":\n`;
+          results.forEach((r: any, i: number) => {
+            enhancedSystemPrompt += `${i + 1}. ${r.title}\n   ${r.snippet}\n   Source: ${r.url}\n\n`;
+          });
+        } catch (error) {
+          console.error(`Search failed for query "${query}":`, error);
+        }
       }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Search failed: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    
-    // Extract and format results
-    const results = data.web?.results?.slice(0, 5).map((result: any) => ({
-      title: result.title,
-      url: result.url,
-      snippet: result.description,
-      favicon: result.favicon,
-    })) || [];
+    // Search knowledge base if enabled
+    if (args.useKnowledgeBase) {
+      try {
+        const kbResults = await ctx.runAction(api.knowledgeBase.search, {
+          query: args.content,
+          projectId: args.projectId,
+          limit: 3,
+        });
 
-    // Store search results
+        if (kbResults.length > 0) {
+          enhancedSystemPrompt += `\n\nRelevant Knowledge Base Articles:\n`;
+          kbResults.forEach((doc: any, i: number) => {
+            enhancedSystemPrompt += `${i + 1}. ${doc.title}\n   ${doc.content.slice(0, 200)}...\n\n`;
+          });
+        }
+      } catch (error) {
+        console.error("Knowledge base search failed:", error);
+      }
+    }
+
+    // Send message with enhanced context
+    const result = await sendMessage(ctx, {
+      ...args,
+      systemPrompt: enhancedSystemPrompt,
+    });
+
+    return {
+      ...result,
+      searchResults,
+    };
+  },
+});
+
+// Web search function
+async function searchWeb(query: string) {
+  const apiKey = process.env.CONVEX_BRAVE_SEARCH_API_KEY;
+  if (!apiKey) {
+    console.warn("Brave Search API key not configured");
+    return [];
+  }
+
+  const response = await fetch(
+    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+    {
+      headers: {
+        "Accept": "application/json",
+        "X-Subscription-Token": apiKey,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Search failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
+  return data.web?.results?.slice(0, 5).map((result: any) => ({
+    title: result.title,
+    url: result.url,
+    snippet: result.description,
+  })) || [];
+}
+
+// Store search results for a message
+export const storeSearchResults = internalAction({
+  args: {
+    messageId: v.id("messages"),
+    query: v.string(),
+    results: v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      favicon: v.optional(v.string()),
+    })),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     await ctx.runMutation(internal.messages.storeSearchResults, {
       messageId: args.messageId,
       query: args.query,
-      results,
+      results: args.results,
+      searchedAt: Date.now(),
     });
-
-    return results;
+    return null;
   },
 });

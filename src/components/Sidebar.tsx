@@ -8,12 +8,14 @@ export function Sidebar({
   isOpen, 
   onClose,
   theme,
-  setTheme 
+  setTheme,
+  isCollapsed = false 
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
+  isCollapsed?: boolean;
 }) {
   const { state, actions } = useEnhancedSync();
   const threads = useThreads();
@@ -90,7 +92,7 @@ export function Sidebar({
 
   return (
     <>
-      <aside className={`c3-sidebar ${isOpen ? 'open' : ''} c3-scrollbar`}>
+      <aside className={`c3-sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''} c3-scrollbar`}>
         {/* Sidebar Header */}
         <div className="pl-6 pr-4 py-6 border-b border-[var(--c3-border-subtle)]">
           <div className="flex items-center justify-between mb-4">
@@ -150,9 +152,9 @@ export function Sidebar({
           )}
         </div>
 
-        {/* Thread List */}
+        {/* Thread List - Compact Style */}
         <div className="c3-thread-list">
-          {filteredThreads.length === 0 ? (
+        {filteredThreads.length === 0 ? (
             <div className="text-center py-8 px-4">
               {searchQuery ? (
                 <>
@@ -194,43 +196,41 @@ export function Sidebar({
               {filteredThreads.map((thread, index) => (
                 <div
                   key={thread._id}
-                  className={`c3-thread-item ${state.selectedThreadId === thread._id ? 'active' : ''}`}
+                  className={`c3-thread-item-compact ${state.selectedThreadId === thread._id ? 'active' : ''} group`}
                   onClick={() => handleSelectThread(thread._id)}
                   style={{
-                    animationDelay: `${index * 30}ms`
+                    animationDelay: `${index * 20}ms`
                   }}
                 >
-                  <div className="c3-thread-icon">
-                    {thread.isOptimistic ? (
-                      <div className="c3-spinner w-4 h-4" />
-                    ) : (
-                      <MessageSquare className="w-5 h-5" />
-                    )}
-                  </div>
-                  
-                  <div className="c3-thread-content">
-                    <div className="c3-thread-title">{thread.title}</div>
-                    <div className="c3-thread-preview">
-                      {thread.isOptimistic ? "Creating..." : 
-                       thread.hasLocalChanges ? "Syncing changes..." : 
-                       `${thread.provider || 'openai'} • ${thread.model?.split('/').pop() || 'gpt-4'}`}
+                  <div className="c3-thread-content flex-1 min-w-0">
+                    <div className="font-medium text-sm text-[var(--c3-text-primary)] truncate">
+                      {thread.title}
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[10px] text-[var(--c3-text-muted)]">
+                        {formatRelativeTime(thread.lastMessageAt)}
+                      </span>
+                      {thread.isOptimistic && (
+                        <span className="text-[10px] text-[var(--c3-primary)]">
+                          • Creating
+                        </span>
+                      )}
+                      {thread.hasLocalChanges && !thread.isOptimistic && (
+                        <span className="text-[10px] text-[var(--c3-warning)]">
+                          • Syncing
+                        </span>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="c3-thread-time">
-                      {formatRelativeTime(thread.lastMessageAt)}
-                    </span>
-                    
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => handleDeleteThread(thread._id, thread.title, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-[var(--c3-surface-hover)] rounded-md c3-transition-all text-[var(--c3-text-tertiary)] hover:text-[var(--c3-error)]"
-                      title="Delete chat"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {/* Delete Button - Smaller */}
+                  <button
+                    onClick={(e) => handleDeleteThread(thread._id, thread.title, e)}
+                    className="opacity-0 group-hover:opacity-70 p-1 hover:bg-[var(--c3-surface-hover)] rounded c3-transition-all text-[var(--c3-text-tertiary)] hover:text-[var(--c3-error)]"
+                    title="Delete chat"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -246,13 +246,17 @@ export function Sidebar({
                 <p>Last sync: {new Date(syncStatus.lastSyncTime).toLocaleTimeString()}</p>
               )}
               {!isOnline && (
-                <p className="text-[var(--c3-warning)] font-medium mt-1">
-                  ⚠️ Offline - changes will sync when connected
+                <p className="text-[var(--c3-warning)] font-medium mt-1 flex items-center justify-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Offline - changes will sync when connected
                 </p>
               )}
               {syncStatus.hasError && (
-                <p className="text-[var(--c3-error)] font-medium mt-1">
-                  ❌ {syncStatus.error}
+                <p className="text-[var(--c3-error)] font-medium mt-1 flex items-center justify-center gap-1">
+                  <X className="w-3.5 h-3.5" />
+                  {syncStatus.error}
                 </p>
               )}
             </div>

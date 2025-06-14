@@ -2,8 +2,7 @@ import { RefObject } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { Message } from "../lib/corrected-sync-engine";
 import { Id } from "../../convex/_generated/dataModel";
-import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock } from "lucide-react";
-import { OpenAI, Claude, Google, Perplexity, Cohere, Mistral, Baidu } from "@lobehub/icons";
+import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock, Cpu, MessageSquare, Search, Braces } from "lucide-react";
 
 interface MessageListProps {
   messages: Message[];
@@ -11,15 +10,19 @@ interface MessageListProps {
   threadId: Id<"threads">;
 }
 
-// Provider icon mapping
+// Provider icon mapping using Lucide icons
 const providerIcons: Record<string, React.ComponentType<any>> = {
-  openai: OpenAI,
-  anthropic: Claude,
-  google: Google,
-  perplexity: Perplexity,
-  cohere: Cohere,
-  mistral: Mistral,
-  baidu: Baidu,
+  openai: Bot,
+  anthropic: MessageSquare,
+  google: Search,
+  perplexity: Search,
+  cohere: Braces,
+  mistral: Cpu,
+  baidu: Globe,
+  deepseek: Brain,
+  groq: Cpu,
+  together: Braces,
+  openrouter: Globe,
 };
 
 export function MessageList({ messages, messagesEndRef, threadId }: MessageListProps) {

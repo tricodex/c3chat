@@ -59,14 +59,14 @@
   --c3-shadow-glow: 0 0 20px oklch(from var(--c3-primary) l c h / 0.3);
   --c3-shadow-inner-glow: inset 0 0 20px oklch(from var(--c3-primary) l c h / 0.05);
   
-  /* Spacing - Professional enterprise spacing */
+  /* Spacing - Significantly increased for enterprise-grade appearance */
   --c3-space-xs: 8px;    /* 8px */
-  --c3-space-sm: 12px;   /* 12px */
-  --c3-space-md: 16px;   /* 16px */
-  --c3-space-lg: 24px;   /* 24px */
-  --c3-space-xl: 32px;   /* 32px */
-  --c3-space-2xl: 48px;  /* 48px */
-  --c3-space-3xl: 64px;  /* 64px */
+  --c3-space-sm: 16px;   /* 16px */
+  --c3-space-md: 24px;   /* 24px */
+  --c3-space-lg: 32px;   /* 32px */
+  --c3-space-xl: 48px;   /* 48px */
+  --c3-space-2xl: 64px;  /* 64px */
+  --c3-space-3xl: 96px;  /* 96px */
   
   /* Radii - Modern and Crisp */
   --c3-radius-sm: 0.5rem;    /* 8px */
@@ -117,10 +117,11 @@
   --c3-text-tertiary: oklch(0.52 0.015 280);
   --c3-text-muted: oklch(0.68 0.012 280);
   
-  /* Softer border colors for light mode */
-  --c3-border-primary: oklch(0.88 0.012 85);
-  --c3-border-secondary: oklch(0.91 0.01 85);
-  --c3-border-subtle: oklch(0.94 0.008 85);
+  /* Remove all borders in light mode by making them transparent */
+  --c3-border-primary: transparent !important;
+  --c3-border-secondary: transparent !important;
+  --c3-border-subtle: transparent !important;
+  --c3-border-focus: oklch(from var(--c3-primary) l c h / 0.3) !important;
   
   /* Message specific light mode */
   --c3-msg-ai-bg: oklch(0.98 0.006 85);

@@ -97,10 +97,29 @@ body::after {
   border-right: 1px solid var(--c3-border-subtle);
   display: flex;
   flex-direction: column;
-  transition: transform var(--c3-duration-normal) var(--c3-ease-out);
+  transition: width var(--c3-duration-normal) var(--c3-ease-out), transform var(--c3-duration-normal) var(--c3-ease-out);
   box-shadow: 4px 0 24px oklch(0 0 0 / 0.05);
   position: relative;
   overflow: hidden;
+  transform: translateX(0);
+}
+
+.c3-sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.c3-sidebar.collapsed > * {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+}
+
+[data-theme="light"] .c3-sidebar {
+  border-right: none !important;
+  box-shadow: 2px 0 20px oklch(0 0 0 / 0.06);
+  background: oklch(0.99 0.004 85);
 }
 
 .c3-sidebar::before {
@@ -157,6 +176,12 @@ body::after {
   box-shadow: 0 2px 20px oklch(0 0 0 / 0.05);
 }
 
+[data-theme="light"] .c3-header {
+  border-bottom: none;
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.08);
+  background: oklch(from var(--c3-bg-secondary) l c h / 0.95);
+}
+
 .c3-header::after {
   content: '';
   position: absolute;
@@ -175,24 +200,42 @@ body::after {
    CHAT COMPONENTS
    ======================= */
 
-/* Chat Container */
+/* Chat Container - Full height with proper flex layout */
 .c3-chat-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0; /* Important for Firefox flex children */
   overflow: hidden;
   position: relative;
+  isolation: isolate;
+}
+
+/* Chat Controls Bar - Enterprise Style */
+.c3-chat-controls {
+  background: var(--c3-bg-secondary);
+  border-bottom: 1px solid var(--c3-border-subtle);
+  position: relative;
+  z-index: 5;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .c3-chat-controls {
+  border-bottom: none;
+  box-shadow: 0 2px 10px oklch(0 0 0 / 0.06);
+  background: oklch(from var(--c3-bg-secondary) l c h / 0.98);
 }
 
 /* Messages Area - Professional with proper spacing */
 .c3-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--c3-space-lg) var(--c3-space-xl);
+  padding: var(--c3-space-2xl) var(--c3-space-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--c3-space-md);
+  gap: var(--c3-space-xl);
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
@@ -204,7 +247,6 @@ body::after {
   gap: var(--c3-space-md);
   max-width: 70%;
   animation: c3-fade-in var(--c3-duration-normal) var(--c3-ease-out);
-  margin-bottom: var(--c3-space-md);
   position: relative;
 }
 
@@ -271,6 +313,12 @@ body::after {
   color: var(--c3-primary);
 }
 
+[data-theme="light"] .c3-message.assistant .c3-message-avatar {
+  border: none;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.08);
+  background: oklch(0.97 0.006 85);
+}
+
 /* Message Content - Glass Morphism Style */
 .c3-message-content {
   background: var(--c3-surface-primary);
@@ -285,6 +333,8 @@ body::after {
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 2px 12px oklch(0 0 0 / 0.05);
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
+  cursor: text;
+  user-select: text;
 }
 
 .c3-message-content:hover {
@@ -311,6 +361,12 @@ body::after {
   padding: var(--c3-space-md);
   overflow-x: auto;
   margin: var(--c3-space-md) 0;
+}
+
+[data-theme="light"] .c3-message-content pre {
+  border: none;
+  box-shadow: inset 0 2px 4px oklch(0 0 0 / 0.04);
+  background: oklch(0.96 0.006 85);
 }
 
 .c3-message-content code {
@@ -357,6 +413,15 @@ body::after {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+[data-theme="light"] .c3-input-area {
+  border-top: none;
+  box-shadow: 0 -2px 12px oklch(0 0 0 / 0.08);
+  background: oklch(from var(--c3-bg-secondary) l c h / 0.98);
 }
 
 .c3-input-area::before {
@@ -375,11 +440,12 @@ body::after {
 
 .c3-input-container {
   display: flex;
-  gap: var(--c3-space-md);
-  align-items: flex-end;
+  flex-direction: column;
+  gap: var(--c3-space-sm);
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+  position: relative;
 }
 
 .c3-input-wrapper {
@@ -388,11 +454,12 @@ body::after {
   border: 1px solid var(--c3-border-subtle);
   border-radius: var(--c3-radius-lg);
   display: flex;
-  align-items: flex-end;
-  padding: var(--c3-space-sm);
+  align-items: center;
+  padding: var(--c3-space-xs) var(--c3-space-sm);
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
   position: relative;
   overflow: hidden;
+  gap: var(--c3-space-xs);
 }
 
 .c3-input-wrapper::before {
@@ -422,10 +489,12 @@ body::after {
   outline: none;
   color: var(--c3-text-primary);
   font-size: var(--c3-font-size-base);
-  padding: var(--c3-space-sm) var(--c3-space-md);
-  min-height: 44px;
+  font-family: var(--c3-font-sans);
+  padding: var(--c3-space-sm) var(--c3-space-sm);
+  min-height: 40px;
   max-height: 120px;
   resize: none;
+  line-height: 1.4;
 }
 
 .c3-input::placeholder {
@@ -490,6 +559,11 @@ body::after {
   border: 1px solid var(--c3-border-primary);
 }
 
+[data-theme="light"] .c3-button-secondary {
+  border: none;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
+}
+
 .c3-button-secondary:hover:not(:disabled) {
   background: var(--c3-surface-hover);
   border-color: var(--c3-primary);
@@ -532,14 +606,15 @@ body::after {
 .c3-thread-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--c3-space-lg) var(--c3-space-md);
+  padding: var(--c3-space-sm) var(--c3-space-xs);
 }
 
+/* Original thread item style - keeping for compatibility */
 .c3-thread-item {
   display: flex;
   align-items: center;
   gap: var(--c3-space-md);
-  padding: var(--c3-space-lg) var(--c3-space-md);
+  padding: var(--c3-space-md) var(--c3-space-lg);
   margin: 0 0 var(--c3-space-sm) 0;
   border-radius: var(--c3-radius-lg);
   cursor: pointer;
@@ -549,6 +624,22 @@ body::after {
   background: var(--c3-surface-primary);
   border: 1px solid transparent;
   box-shadow: 0 1px 3px oklch(0 0 0 / 0.02);
+}
+
+/* Compact thread item style for enterprise appearance */
+.c3-thread-item-compact {
+  display: flex;
+  align-items: center;
+  gap: var(--c3-space-xs);
+  padding: 12px 16px;
+  margin: 0 8px 2px 8px;
+  border-radius: var(--c3-radius-md);
+  cursor: pointer;
+  transition: all var(--c3-duration-fast) var(--c3-ease-out);
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+  border: 1px solid transparent;
 }
 
 .c3-thread-item::before {
@@ -587,19 +678,44 @@ body::after {
   border-radius: 0 var(--c3-radius-sm) var(--c3-radius-sm) 0;
 }
 
-.c3-thread-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--c3-radius-md);
-  background: var(--c3-gradient-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px oklch(from var(--c3-primary) l c h / 0.2);
+/* Compact thread item states */
+.c3-thread-item-compact::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, oklch(from var(--c3-primary) l c h / 0.03));
+  opacity: 0;
+  transition: opacity var(--c3-duration-fast);
 }
+
+.c3-thread-item-compact:hover::before {
+  opacity: 1;
+}
+
+.c3-thread-item-compact:hover {
+  background: var(--c3-surface-hover);
+  transform: translateX(2px);
+}
+
+.c3-thread-item-compact.active {
+  background: var(--c3-surface-primary);
+  border: 1px solid var(--c3-border-subtle);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.03);
+}
+
+.c3-thread-item-compact.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 50%;
+  background: var(--c3-gradient-primary);
+  border-radius: 0 var(--c3-radius-sm) var(--c3-radius-sm) 0;
+}
+
+/* Thread icon removed - no longer needed */
 
 .c3-thread-content {
   flex: 1;
@@ -754,6 +870,13 @@ body::after {
   box-shadow: var(--c3-shadow-xl);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  z-index: 20;
+}
+
+[data-theme="light"] .c3-command-suggestions {
+  border: none;
+  box-shadow: 0 -4px 16px oklch(0 0 0 / 0.1);
+  background: oklch(0.99 0.004 85);
 }
 
 .c3-command-item {
@@ -808,6 +931,12 @@ body::after {
   margin-bottom: var(--c3-space-lg);
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
+}
+
+[data-theme="light"] .c3-empty-icon {
+  border: none;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
+  background: oklch(0.98 0.006 85);
 }
 
 .c3-suggestion-card {
@@ -903,6 +1032,12 @@ body::after {
   border: 1px solid var(--c3-border-subtle);
   border-radius: var(--c3-radius-md);
   backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .c3-attachment-preview {
+  border: none;
+  box-shadow: 0 2px 10px oklch(0 0 0 / 0.06);
+  background: oklch(0.98 0.006 85);
 }
 
 .c3-attachment-icon {
@@ -1242,15 +1377,48 @@ body::after {
 }
 
 [data-theme="light"] .c3-message-content {
-  box-shadow: 0 2px 12px oklch(0 0 0 / 0.04);
+  box-shadow: 0 2px 16px oklch(0 0 0 / 0.08);
+  border: none;
 }
 
 [data-theme="light"] .c3-message-content:hover {
   box-shadow: 0 4px 16px oklch(0 0 0 / 0.06);
 }
 
+[data-theme="light"] .c3-thread-item {
+  border: none;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
+  margin-bottom: var(--c3-space-sm);
+  background: oklch(0.98 0.004 85);
+}
+
 [data-theme="light"] .c3-thread-item:hover {
-  background: var(--c3-surface-hover);
+  background: oklch(0.96 0.006 85);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.08);
+  transform: translateX(4px);
+}
+
+[data-theme="light"] .c3-thread-item.active {
+  border: none;
+  box-shadow: 0 4px 16px oklch(from var(--c3-primary) l c h / 0.15);
+  background: oklch(0.975 0.006 85);
+}
+
+/* Light mode compact thread items */
+[data-theme="light"] .c3-thread-item-compact {
+  border: none;
+  background: transparent;
+}
+
+[data-theme="light"] .c3-thread-item-compact:hover {
+  background: oklch(0.975 0.006 85);
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.04);
+}
+
+[data-theme="light"] .c3-thread-item-compact.active {
+  border: none;
+  box-shadow: 0 2px 8px oklch(from var(--c3-primary) l c h / 0.1);
+  background: oklch(0.98 0.004 85);
 }
 
 [data-theme="light"] .c3-button-primary {
@@ -1259,4 +1427,318 @@ body::after {
 
 [data-theme="light"] .c3-button-primary:hover:not(:disabled) {
   box-shadow: 0 4px 12px oklch(from var(--c3-primary) l c h / 0.25);
+}
+
+/* Light mode input improvements */
+[data-theme="light"] .c3-input-wrapper {
+  border: none;
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.06);
+  background: oklch(0.98 0.004 85);
+}
+
+[data-theme="light"] .c3-input-wrapper:focus-within {
+  box-shadow: 0 0 0 3px oklch(from var(--c3-primary) l c h / 0.15);
+}
+
+/* Light mode card improvements */
+[data-theme="light"] .c3-feature-card {
+  border: none;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.06);
+  background: oklch(0.985 0.004 85);
+}
+
+[data-theme="light"] .c3-suggestion-card {
+  border: none;
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.05);
+  background: oklch(0.985 0.004 85);
+}
+
+[data-theme="light"] .c3-model-selector {
+  border: none;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
+  background: oklch(0.985 0.004 85);
+}
+
+/* Additional light mode border removals */
+[data-theme="light"] .c3-badge {
+  border: none;
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.08);
+}
+
+[data-theme="light"] .c3-kbd {
+  border: none;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.06);
+}
+
+[data-theme="light"] .c3-markdown .c3-inline-code {
+  border: none;
+  box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.04);
+}
+
+[data-theme="light"] .c3-markdown .c3-table-wrapper {
+  border: none;
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.06);
+}
+
+[data-theme="light"] .c3-markdown .c3-table th,
+[data-theme="light"] .c3-markdown .c3-table td {
+  border-bottom: 1px solid oklch(0 0 0 / 0.04);
+}
+
+/* Remove ALL borders from light mode - completely remove border property */
+[data-theme="light"] * {
+  border: none !important;
+  outline: none !important;
+}
+
+/* Remove all focus borders in light mode */
+[data-theme="light"] *:focus,
+[data-theme="light"] *:focus-visible,
+[data-theme="light"] *:focus-within {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Fix clickability - ensure all interactive elements are properly layered */
+.c3-layout {
+  pointer-events: auto;
+  position: relative;
+  isolation: isolate;
+}
+
+.c3-chat-container {
+  pointer-events: auto;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.c3-messages {
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.c3-input-area {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 30 !important;
+  background: var(--c3-bg-secondary) !important;
+  isolation: isolate;
+  min-height: auto;
+  display: block !important;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.c3-input-container {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 31 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.c3-input-wrapper {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 32 !important;
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+}
+
+.c3-input {
+  position: relative;
+  z-index: 100 !important;
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text !important;
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: transparent !important;
+  width: 100% !important;
+  display: block !important;
+  min-height: 40px;
+  resize: vertical;
+}
+
+/* Ensure all interactive elements are clickable */
+.c3-button,
+button {
+  pointer-events: auto !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: pointer !important;
+  position: relative;
+  z-index: 2;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+select {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 2;
+}
+
+/* Fix specific input/button interaction issues */
+.c3-input-wrapper button,
+.c3-input-wrapper input,
+.c3-input-wrapper textarea {
+  pointer-events: auto !important;
+  z-index: 100 !important;
+}
+
+/* Ensure sidebar collapse button works */
+.c3-header button {
+  pointer-events: auto !important;
+  z-index: 15 !important;
+}
+
+/* Force clickability on all interactive elements */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+.c3-thread-item,
+.c3-message-content,
+.c3-model-selector {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure all inputs and buttons can be interacted with */
+textarea,
+input,
+button,
+select,
+a {
+  pointer-events: auto !important;
+}
+
+/* Fix any potential overlay issues */
+.c3-chat-container > * {
+  pointer-events: auto !important;
+}
+
+/* Ensure input area is always on top and clickable */
+.c3-input-area {
+  pointer-events: auto !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 40 !important;
+  background: var(--c3-bg-secondary) !important;
+  border-top: 1px solid var(--c3-border-subtle);
+  margin-top: 0 !important;
+}
+
+.c3-input-area * {
+  pointer-events: auto !important;
+}
+
+.c3-input:focus {
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+/* Ensure message content is selectable */
+.c3-message-content {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Ensure message content is selectable */
+.c3-message-content {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Fix sidebar overlay on mobile */
+@media (max-width: 768px) {
+  .c3-sidebar {
+    z-index: 50;
+  }
+}
+
+/* Ensure proper stacking context */
+.c3-command-suggestions {
+  z-index: 100;
+}
+
+.c3-modal-overlay {
+  z-index: 999;
+}
+
+/* Force remove ALL borders and outlines in light mode - override everything */
+[data-theme="light"] * {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] *::before,
+[data-theme="light"] *::after {
+  border: none !important;
+  outline: none !important;
+}
+
+[data-theme="light"] *:focus,
+[data-theme="light"] *:focus-visible,
+[data-theme="light"] *:focus-within {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Light mode specific hover states */
+[data-theme="light"] .c3-button:hover:not(:disabled) {
+  box-shadow: 0 4px 20px oklch(0 0 0 / 0.1);
+}
+
+[data-theme="light"] .c3-thread-item:hover {
+  box-shadow: 0 4px 20px oklch(0 0 0 / 0.08);
+}
+
+[data-theme="light"] .c3-model-selector:hover {
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
+}
+
+/* Better light mode surface colors */
+[data-theme="light"] .c3-surface-primary {
+  background: oklch(0.99 0.003 85);
+}
+
+[data-theme="light"] .c3-surface-secondary {
+  background: oklch(0.975 0.004 85);
+}
+
+[data-theme="light"] .c3-bg-primary {
+  background: oklch(0.985 0.006 85);
+}
+
+[data-theme="light"] .c3-bg-secondary {
+  background: oklch(0.97 0.008 85);
 }

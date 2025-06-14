@@ -21,6 +21,7 @@ import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import { createLocalDB, LocalDB, StoredThread, StoredMessage } from './local-db';
 import { nanoid } from 'nanoid';
+import { getAgentSystemPrompt, getAgentTemperature } from './ai-agents';
 
 // Enhanced Types
 interface Thread extends StoredThread {
@@ -272,7 +273,7 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
   // Load messages for selected thread (only for real threads, not optimistic)
   const selectedMessages = useQuery(
     api.messages.list,
-    (state.selectedThreadId && !state.selectedThreadId.startsWith('temp_')) 
+    state.selectedThreadId && !state.selectedThreadId.startsWith('temp_') 
       ? { threadId: state.selectedThreadId as Id<"threads"> } 
       : "skip"
   ) || [];
@@ -440,6 +441,15 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
     // This is mainly for triggering the sync visually
   }, [state.isOnline]);
 
+  // Advanced actions from AI module
+  const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
+  const generateImageAction = useAction(api.ai.generateImage);
+  
+  // Thread actions
+  const createBranchMutation = useMutation(api.threads.createBranch);
+  const shareThreadMutation = useMutation(api.threads.share);
+  const exportThreadAction = useAction(api.threads.exportThread);
+  
   // Actions
   const actions = useMemo(() => ({
     selectThread: async (threadId: string | null) => {
@@ -481,7 +491,7 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
       
       try {
         // Send to Convex (source of truth)
-        const realThreadId = await createThreadMutation({ title: autoTitle });
+        const realThreadId = await createThreadMutation({ title: autoTitle, provider, model });
         
         // Remove optimistic thread and let Convex sync handle the real one
         dispatch({ type: 'REMOVE_OPTIMISTIC_THREAD', payload: optimisticId });
@@ -540,7 +550,15 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
       }
     },
 
-    sendMessage: async (content: string, threadId?: string) => {
+    sendMessage: async (
+      content: string, 
+      threadId?: string,
+      provider?: string,
+      model?: string,
+      apiKey?: string | null,
+      attachments?: Id<"attachments">[],
+      agentId?: string
+    ) => {
       if (!localDB.current) throw new Error('Local cache not initialized');
       
       const targetThreadId = threadId || state.selectedThreadId;
@@ -580,11 +598,16 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
         if (!targetThreadId.startsWith('temp_')) {
           const selectedThread = state.threads.find(t => t._id === targetThreadId);
           
+          const systemPrompt = agentId ? getAgentSystemPrompt(agentId) : undefined;
+          
           await sendMessageAction({
             threadId: targetThreadId as Id<"threads">,
             content,
-            provider: selectedThread?.provider || "openai",
-            model: selectedThread?.model || "gpt-4o-mini",
+            provider: provider || selectedThread?.provider || "openai",
+            model: model || selectedThread?.model || "gpt-4o-mini",
+            apiKey: apiKey || undefined,
+            attachmentIds: attachments,
+            systemPrompt,
           });
           
           console.log('✅ Message sent to Convex');
@@ -614,6 +637,176 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
 
     syncWithConvex,
 
+    sendMessageWithSearch: async (
+      content: string,
+      threadId: string,
+      provider: string,
+      model: string,
+      apiKey: string | null,
+      searchQueries: string[],
+      attachments?: Id<"attachments">[],
+      agentId?: string
+    ) => {
+      if (!threadId || !provider || !model) throw new Error('Missing required parameters');
+
+      // Create optimistic messages
+      const userMessageId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "user",
+        content,
+        localCreatedAt: Date.now(),
+        isOptimistic: true,
+        syncedToServer: false,
+      };
+
+      const assistantMessageId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "assistant",
+        content: "Searching the web and generating response...",
+        isStreaming: true,
+        cursor: true,
+        localCreatedAt: Date.now() + 1,
+        isOptimistic: true,
+        syncedToServer: false,
+      };
+
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
+
+      try {
+        const systemPrompt = agentId ? getAgentSystemPrompt(agentId) : undefined;
+        
+        await sendMessageWithContext({
+          threadId: threadId as Id<"threads">,
+          content,
+          provider,
+          model,
+          apiKey: apiKey || undefined,
+          attachmentIds: attachments,
+          systemPrompt,
+          enableWebSearch: true,
+          searchQueries,
+        });
+
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
+      } catch (error) {
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
+        throw error;
+      }
+    },
+
+    generateImage: async (
+      prompt: string,
+      threadId: string,
+      provider: string,
+      apiKey: string | null
+    ) => {
+      if (!threadId || !provider) throw new Error('Missing required parameters');
+
+      // Create optimistic messages
+      const userMessageId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "user",
+        content: `/image ${prompt}`,
+        localCreatedAt: Date.now(),
+        isOptimistic: true,
+        syncedToServer: false,
+      };
+
+      const assistantMessageId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "assistant",
+        content: "Generating image...",
+        isStreaming: true,
+        localCreatedAt: Date.now() + 1,
+        isOptimistic: true,
+        syncedToServer: false,
+      };
+
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
+
+      try {
+        await generateImageAction({
+          threadId: threadId as Id<"threads">,
+          prompt,
+          provider,
+          apiKey: apiKey || undefined,
+        });
+
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
+      } catch (error) {
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userMessageId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantMessageId });
+        throw error;
+      }
+    },
+
+    createBranch: async (threadId: string) => {
+      try {
+        const newThreadId = await createBranchMutation({ 
+          parentThreadId: threadId as Id<"threads"> 
+        });
+        dispatch({ type: 'SELECT_THREAD', payload: newThreadId });
+        return newThreadId;
+      } catch (error) {
+        console.error('Failed to create branch:', error);
+        throw error;
+      }
+    },
+
+    exportThread: async (threadId: string, format: string = "markdown") => {
+      try {
+        const result = await exportThreadAction({ 
+          threadId: threadId as Id<"threads">,
+          format 
+        });
+        
+        // Create download link
+        const blob = new Blob([result.content], { type: result.mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        return result;
+      } catch (error) {
+        console.error('Failed to export thread:', error);
+        throw error;
+      }
+    },
+
+    sendSystemMessage: async (content: string, threadId: string) => {
+      // System messages are just rendered locally, not sent to AI
+      const systemMessageId = `temp_system_${nanoid()}` as Id<"messages">;
+      const systemMessage: Message = {
+        _id: systemMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "assistant",
+        content,
+        localCreatedAt: Date.now(),
+        isOptimistic: true,
+        syncedToServer: false,
+      };
+
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: systemMessage });
+    },
+
     clearLocalData: async () => {
       if (!localDB.current) return;
 
@@ -629,6 +822,11 @@ export function EnhancedSyncProvider({ children }: { children: React.ReactNode }
     updateThreadMutation, 
     deleteThreadMutation, 
     sendMessageAction,
+    sendMessageWithContext,
+    generateImageAction,
+    createBranchMutation,
+    shareThreadMutation,
+    exportThreadAction,
     syncWithConvex
   ]);
 

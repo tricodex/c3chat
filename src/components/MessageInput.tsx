@@ -1,6 +1,7 @@
 import { useState, useRef, KeyboardEvent } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { Paperclip, Send, Sparkles, Globe, Command, X, Mic, Image, FileText } from "lucide-react";
+import { VoiceControls } from "./VoiceControls";
 
 interface MessageInputProps {
   value: string;
@@ -85,6 +86,16 @@ export function MessageInput({
 
       <div className="c3-input-container">
         <div className="c3-input-wrapper">
+          {/* Voice Controls */}
+          <VoiceControls
+            onTranscript={(text) => {
+              onChange(value + (value ? ' ' : '') + text);
+              textareaRef.current?.focus();
+            }}
+            currentMessage={value}
+            className="mr-1"
+          />
+          
           {/* Attachment Button */}
           <button
             type="button"
