@@ -1696,7 +1696,6 @@ a {
 [data-theme="light"] * {
   border: none !important;
   outline: none !important;
-  box-shadow: none !important;
 }
 
 [data-theme="light"] *::before,
@@ -1710,7 +1709,28 @@ a {
 [data-theme="light"] *:focus-within {
   outline: none !important;
   border: none !important;
-  box-shadow: none !important;
+}
+
+/* Preserve shadows for depth in light mode */
+[data-theme="light"] .c3-message-content,
+[data-theme="light"] .c3-thread-item,
+[data-theme="light"] .c3-button,
+[data-theme="light"] .c3-feature-card,
+[data-theme="light"] .c3-suggestion-card,
+[data-theme="light"] .c3-model-selector,
+[data-theme="light"] .c3-input-wrapper,
+[data-theme="light"] .c3-header,
+[data-theme="light"] .c3-sidebar {
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.08) !important;
+}
+
+[data-theme="light"] .c3-message-content:hover,
+[data-theme="light"] .c3-thread-item:hover,
+[data-theme="light"] .c3-button:hover:not(:disabled),
+[data-theme="light"] .c3-feature-card:hover,
+[data-theme="light"] .c3-suggestion-card:hover,
+[data-theme="light"] .c3-model-selector:hover {
+  box-shadow: 0 4px 20px oklch(0 0 0 / 0.12) !important;
 }
 
 /* Light mode specific hover states */

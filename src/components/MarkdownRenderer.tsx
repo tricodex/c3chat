@@ -23,7 +23,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: Mark
               {String(children).replace(/\n$/, '')}
             </CodeBlock>
           ) : (
-            <code className="c3-inline-code" {...props}>
+            <code {...props}>
               {children}
             </code>
           );

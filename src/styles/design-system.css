@@ -60,13 +60,13 @@
   --c3-shadow-inner-glow: inset 0 0 20px oklch(from var(--c3-primary) l c h / 0.05);
   
   /* Spacing - Significantly increased for enterprise-grade appearance */
-  --c3-space-xs: 8px;    /* 8px */
-  --c3-space-sm: 16px;   /* 16px */
-  --c3-space-md: 24px;   /* 24px */
-  --c3-space-lg: 32px;   /* 32px */
-  --c3-space-xl: 48px;   /* 48px */
-  --c3-space-2xl: 64px;  /* 64px */
-  --c3-space-3xl: 96px;  /* 96px */
+  --c3-space-xs: 12px;    /* 12px */
+  --c3-space-sm: 20px;   /* 20px */
+  --c3-space-md: 32px;   /* 32px */
+  --c3-space-lg: 48px;   /* 48px */
+  --c3-space-xl: 64px;   /* 64px */
+  --c3-space-2xl: 96px;  /* 96px */
+  --c3-space-3xl: 128px; /* 128px */
   
   /* Radii - Modern and Crisp */
   --c3-radius-sm: 0.5rem;    /* 8px */
