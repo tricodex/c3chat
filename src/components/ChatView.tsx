@@ -11,7 +11,7 @@ import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
 import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp } from "lucide-react";
-import { getStoredApiKey } from "../lib/ai-providers";
+import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
 export function ChatView() {
@@ -24,8 +24,10 @@ export function ChatView() {
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [attachments, setAttachments] = useState<Id<"attachments">[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("assistant");
-  const [selectedProvider, setSelectedProvider] = useState("openai");
-  const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  
+  // Use the actual provider and model from the selected thread instead of local state
+  const selectedProvider = selectedThread?.provider || "openai";
+  const selectedModel = selectedThread?.model || "gpt-4o";
   const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [isDeepResearchMode, setIsDeepResearchMode] = useState(false);
   
@@ -44,7 +46,14 @@ export function ChatView() {
 
     const apiKey = getStoredApiKey(selectedProvider);
     if (!apiKey) {
-      toast.error(`Please configure your ${selectedProvider} API key in Settings`);
+      const provider = AI_PROVIDERS[selectedProvider];
+      const providerName = provider?.name || selectedProvider;
+      toast.error(
+        <div>
+          <div className="font-semibold">API Key Required</div>
+          <div className="text-sm mt-1">Please configure your {providerName} API key in Settings (click the gear icon in the sidebar)</div>
+        </div>
+      );
       return;
     }
 
@@ -205,17 +214,6 @@ export function ChatView() {
             <AgentSelector
               currentAgentId={selectedAgentId}
               onSelect={setSelectedAgentId}
-            />
-            
-            {/* Model Selector */}
-            <ModelSelector
-              currentProvider={selectedProvider}
-              currentModel={selectedModel}
-              onSelect={(provider, model) => {
-                setSelectedProvider(provider);
-                setSelectedModel(model);
-              }}
-              compact
             />
             
             {/* Feature Toggles */}

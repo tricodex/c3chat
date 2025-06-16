@@ -1008,6 +1008,15 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (!thread) throw new Error('Thread not found');
         
         // Send message and generate AI response in one action
+        console.log('🚀 Sending message with params:', {
+          threadId,
+          provider: provider || thread.provider || 'openai',
+          model: model || thread.model || 'gpt-4o-mini',
+          hasApiKey: !!apiKey,
+          attachmentIds: attachmentIds?.length || 0,
+          agentId
+        });
+        
         await generateResponseAction({
           threadId: threadId as Id<"threads">,
           content,
@@ -1018,8 +1027,9 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           systemPrompt: agentId ? getAgentSystemPrompt(agentId) : undefined,
         });
         
-        console.log(' Message sent and AI response generated');
+        console.log('✅ Message sent and AI response generated');
       } catch (error) {
+        console.error('❌ Failed to send message:', error);
         if (isRetryableError(error)) {
           const operation: PendingOperation = {
             id: nanoid(),

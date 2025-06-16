@@ -2,10 +2,23 @@ import { useEnhancedSync, useSelectedThread } from "../lib/corrected-sync-engine
 import { ModelSelector } from "./ModelSelector";
 import { SignOutButton } from "../SignOutButton";
 import { Menu, Save, Sparkles, Cloud, CloudOff } from "lucide-react";
+import { toast } from "sonner";
 
 export function Header({ onMenuClick }: { onMenuClick: () => void }) {
-  const { state } = useEnhancedSync();
+  const { state, actions } = useEnhancedSync();
   const selectedThread = useSelectedThread();
+
+  const handleModelChange = async (provider: string, model: string) => {
+    if (!selectedThread) return;
+    
+    try {
+      await actions.updateThread(selectedThread._id, { provider, model });
+      toast.success("Model updated");
+    } catch (error) {
+      toast.error("Failed to update model");
+      console.error(error);
+    }
+  };
 
   return (
     <header className="c3-header">
@@ -39,9 +52,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
               <ModelSelector
                 currentProvider={selectedThread.provider}
                 currentModel={selectedThread.model}
-                onSelect={(provider, model) => {
-                  // This will be handled by the ModelSelector component
-                }}
+                onSelect={handleModelChange}
                 compact
               />
             )}
