@@ -94,14 +94,20 @@ const applicationTables = {
     .index("by_thread", ["threadId"]),
 
   attachments: defineTable({
-    messageId: v.id("messages"),
+    messageId: v.optional(v.id("messages")),
+    threadId: v.optional(v.id("threads")),
     storageId: v.id("_storage"),
     filename: v.string(),
     contentType: v.string(),
     size: v.number(),
+    uploadedAt: v.number(),
     // Extracted text for PDFs
     extractedText: v.optional(v.string()),
-  }).index("by_message", ["messageId"]),
+    // Processing metadata
+    metadata: v.optional(v.any()),
+  })
+    .index("by_message", ["messageId"])
+    .index("by_thread", ["threadId"]),
 
   // User preferences
   userSettings: defineTable({
@@ -182,6 +188,37 @@ const applicationTables = {
   })
     .index("by_user", ["userId"])
     .index("by_user_and_provider", ["userId", "provider"]),
+
+  // Active collaboration sessions
+  activeSessions: defineTable({
+    threadId: v.id("threads"),
+    userId: v.id("users"),
+    cursor: v.object({
+      line: v.number(),
+      column: v.number(),
+    }),
+    isTyping: v.boolean(),
+    lastActivity: v.number(),
+  })
+    .index("by_thread", ["threadId"])
+    .index("by_user", ["userId"])
+    .index("by_user_and_thread", ["userId", "threadId"]),
+
+  // Collaborative annotations
+  annotations: defineTable({
+    threadId: v.id("threads"),
+    messageId: v.id("messages"),
+    userId: v.id("users"),
+    content: v.string(),
+    position: v.optional(v.object({
+      start: v.number(),
+      end: v.number(),
+    })),
+    createdAt: v.number(),
+  })
+    .index("by_thread", ["threadId"])
+    .index("by_message", ["messageId"])
+    .index("by_user", ["userId"]),
 
   // Analytics/Usage tracking
   analytics: defineTable({

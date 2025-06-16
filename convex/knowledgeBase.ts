@@ -1,4 +1,4 @@
-import { mutation, query, action, internalMutation } from "./_generated/server";
+import { mutation, query, action, internalMutation, internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { api, internal } from "./_generated/api";
@@ -76,7 +76,7 @@ export const generateEmbedding = internalAction({
     documentId: v.id("knowledgeBase"),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (ctx: any, args: any) => {
     const document = await ctx.runQuery(internal.knowledgeBase.getDocument, {
       documentId: args.documentId,
     });
@@ -134,7 +134,7 @@ export const storeEmbedding = internalMutation({
 });
 
 // Internal query to get document
-export const getDocument = query({
+export const getDocument = internalQuery({
   args: {
     documentId: v.id("knowledgeBase"),
   },
@@ -189,19 +189,24 @@ export const search = action({
           input: args.query,
         });
 
-        const queryEmbedding = new Float32Array(response.data[0].embedding);
+        const queryEmbedding = response.data[0].embedding;
 
         // Search with vector similarity
-        let vectorQuery = ctx.vectorSearch("knowledgeBase", "by_embedding", queryEmbedding)
-          .limit(limit * 2); // Get more to filter later
-
+        let results;
         if (args.projectId) {
-          vectorQuery = vectorQuery.filter((q) => q.eq("projectId", args.projectId));
+          results = await ctx.vectorSearch("knowledgeBase", "by_embedding", {
+            vector: queryEmbedding,
+            limit: limit * 2,
+            filter: (q: any) => q.eq("projectId", args.projectId)
+          });
+        } else {
+          results = await ctx.vectorSearch("knowledgeBase", "by_embedding", {
+            vector: queryEmbedding,
+            limit: limit * 2
+          });
         }
-
-        const results = await vectorQuery.execute();
         
-        vectorResults = results.map(r => ({
+        vectorResults = results.map((r: any) => ({
           ...r,
           score: 1 - r._score, // Convert distance to similarity
         }));
@@ -226,7 +231,7 @@ export const search = action({
     });
 
     // Add text results
-    textResults.forEach(r => {
+    textResults.forEach((r: any) => {
       if (!allResults.has(r._id)) {
         allResults.set(r._id, { ...r, score: r.score * 0.8 }); // Lower score for text-only matches
       }
@@ -531,7 +536,7 @@ async function checkProjectAccess(
     viewer: 1,
   };
 
-  return roleHierarchy[membership.role] >= roleHierarchy[requiredRole];
+  return roleHierarchy[membership.role as keyof typeof roleHierarchy] >= roleHierarchy[requiredRole as keyof typeof roleHierarchy];
 }
 
 function generateSnippet(content: string, query: string, maxLength: number = 200): string {

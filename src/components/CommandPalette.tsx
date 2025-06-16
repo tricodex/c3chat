@@ -1,389 +1,271 @@
-import { useState, useEffect, useRef } from "react";
-import { toast } from "sonner";
-import { useEnhancedSync, useThreads } from "../lib/corrected-sync-engine";
-import { AI_PROVIDERS } from "../lib/ai-providers";
+import { useState, useEffect } from 'react';
+import { Command } from 'cmdk';
+import { useEnhancedSync, useThreads } from '../lib/corrected-sync-engine.tsx';
+import { useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { 
+  Search, Plus, MessageSquare, Settings, Moon, Sun, 
+  GitBranch, Share2, Download, Trash2, Archive,
+  Hash, User, Bot, Globe, Key, HelpCircle
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 interface CommandPaletteProps {
-  isOpen: boolean;
-  onClose: () => void;
+  theme: 'dark' | 'light';
+  setTheme: (theme: 'dark' | 'light') => void;
 }
 
-interface Command {
-  id: string;
-  title: string;
-  description?: string;
-  icon: string | React.ReactNode;
-  category: "chat" | "ai" | "settings" | "help" | "navigation";
-  action: () => void;
-  keywords?: string[];
-}
-
-export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
-  const { actions } = useEnhancedSync();
+export function CommandPalette({ theme, setTheme }: CommandPaletteProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const { state, actions } = useEnhancedSync();
   const threads = useThreads();
-  const [search, setSearch] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  
+  const shareThread = useMutation(api.threads.share);
+  const archiveThread = useMutation(api.threads.archive);
+  const deleteThread = useMutation(api.threads.remove);
 
-  const commands: Command[] = [
-    // Chat Commands
-    {
-      id: "new-chat",
-      title: "New Chat",
-      description: "Start a new conversation",
-      icon: "💬",
-      category: "chat",
-      action: async () => {
-        onClose();
-        try {
-          await actions.createThread();
-          toast.success("New chat created!");
-        } catch (error) {
-          toast.error("Failed to create chat");
-        }
-      },
-      keywords: ["create", "start", "conversation"],
-    },
-    {
-      id: "clear-chat",
-      title: "Clear Current Chat",
-      description: "Delete all messages in current chat",
-      icon: "🗑️",
-      category: "chat",
-      action: () => {
-        onClose();
-        toast.info("Clear chat coming soon!");
-      },
-    },
-    {
-      id: "export-chat",
-      title: "Export Chat",
-      description: "Download current conversation",
-      icon: "📥",
-      category: "chat",
-      action: () => {
-        onClose();
-        toast.info("Export feature coming soon!");
-      },
-    },
-    {
-      id: "share-chat",
-      title: "Share Chat",
-      description: "Share this conversation with others",
-      icon: "🔗",
-      category: "chat",
-      action: () => {
-        onClose();
-        toast.info("Share feature coming soon!");
-      },
-    },
-    
-    // AI Commands
-    ...Object.values(AI_PROVIDERS).map(provider => ({
-      id: `switch-to-${provider.id}`,
-      title: `Switch to ${provider.name}`,
-      description: provider.description,
-      icon: provider.logo || "🤖",
-      category: "ai" as const,
-      action: () => {
-        onClose();
-        // This would be handled by ModelSelector
-        toast.success(`Switched to ${provider.name}`);
-      },
-      keywords: ["model", "provider", provider.name.toLowerCase()],
-    })),
-    
-    // Settings Commands
-    {
-      id: "toggle-theme",
-      title: "Toggle Theme",
-      description: "Switch between light and dark mode",
-      icon: "🌓",
-      category: "settings",
-      action: () => {
-        onClose();
-        document.documentElement.setAttribute(
-          'data-theme',
-          document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'
-        );
-      },
-      keywords: ["dark", "light", "mode"],
-    },
-    {
-      id: "manage-keys",
-      title: "Manage API Keys",
-      description: "Add or update your API keys",
-      icon: "🔑",
-      category: "settings",
-      action: () => {
-        onClose();
-        // This would open settings modal
-        toast.info("Opening API key settings...");
-      },
-    },
-    {
-      id: "preferences",
-      title: "Preferences",
-      description: "Customize your experience",
-      icon: "⚙️",
-      category: "settings",
-      action: () => {
-        onClose();
-        toast.info("Opening preferences...");
-      },
-    },
-    
-    // Help Commands
-    {
-      id: "shortcuts",
-      title: "Keyboard Shortcuts",
-      description: "View all keyboard shortcuts",
-      icon: "⌨️",
-      category: "help",
-      action: () => {
-        onClose();
-        toast.info("Keyboard shortcuts guide coming soon!");
-      },
-    },
-    {
-      id: "documentation",
-      title: "Documentation",
-      description: "Learn how to use C3Chat",
-      icon: "📚",
-      category: "help",
-      action: () => {
-        onClose();
-        window.open("https://github.com/yourusername/c3chat", "_blank");
-      },
-    },
-    
-    // Navigation - Recent Threads
-    ...threads.slice(0, 5).map(thread => ({
-      id: `thread-${thread._id}`,
-      title: thread.title,
-      description: `Open conversation`,
-      icon: "💭",
-      category: "navigation" as const,
-      action: async () => {
-        onClose();
-        try {
-          await actions.selectThread(thread._id);
-        } catch (error) {
-          toast.error("Failed to open chat");
-        }
-      },
-      keywords: ["chat", "thread", "conversation"],
-    })),
-  ];
-
-  const filteredCommands = search
-    ? commands.filter(cmd => {
-        const searchLower = search.toLowerCase();
-        return (
-          cmd.title.toLowerCase().includes(searchLower) ||
-          cmd.description?.toLowerCase().includes(searchLower) ||
-          cmd.keywords?.some(k => k.includes(searchLower)) ||
-          cmd.category.includes(searchLower)
-        );
-      })
-    : activeCategory
-      ? commands.filter(cmd => cmd.category === activeCategory)
-      : commands;
-
-  const groupedCommands = filteredCommands.reduce((acc, cmd) => {
-    if (!acc[cmd.category]) acc[cmd.category] = [];
-    acc[cmd.category].push(cmd);
-    return acc;
-  }, {} as Record<string, Command[]>);
-
-  const categoryLabels = {
-    chat: "Chat",
-    ai: "AI Models",
-    settings: "Settings",
-    help: "Help",
-    navigation: "Recent Chats",
-  };
-
+  // Open command palette with Cmd+K
   useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-      setSearch("");
-      setSelectedIndex(0);
-      setActiveCategory(null);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isOpen) return;
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          setSelectedIndex(i => Math.min(i + 1, filteredCommands.length - 1));
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          setSelectedIndex(i => Math.max(i - 1, 0));
-          break;
-        case "Enter":
-          e.preventDefault();
-          if (filteredCommands[selectedIndex]) {
-            filteredCommands[selectedIndex].action();
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          if (search) {
-            setSearch("");
-          } else if (activeCategory) {
-            setActiveCategory(null);
-          } else {
-            onClose();
-          }
-          break;
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, filteredCommands, selectedIndex, search, activeCategory, onClose]);
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
 
-  if (!isOpen) return null;
+  const handleNewChat = async () => {
+    try {
+      await actions.createThread();
+      setOpen(false);
+      toast.success('New chat created');
+    } catch (error) {
+      toast.error('Failed to create new chat');
+    }
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    actions.selectThread(threadId);
+    setOpen(false);
+  };
+
+  const handleShare = async () => {
+    if (!state.selectedThreadId) {
+      toast.error('No chat selected');
+      return;
+    }
+
+    try {
+      const shareId = await shareThread({ threadId: state.selectedThreadId as any });
+      const shareUrl = `${window.location.origin}/share/${shareId}`;
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success('Share link copied to clipboard');
+      setOpen(false);
+    } catch (error) {
+      toast.error('Failed to share chat');
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!state.selectedThreadId) {
+      toast.error('No chat selected');
+      return;
+    }
+
+    try {
+      await archiveThread({ 
+        threadId: state.selectedThreadId as any, 
+        archived: true 
+      });
+      toast.success('Chat archived');
+      setOpen(false);
+    } catch (error) {
+      toast.error('Failed to archive chat');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!state.selectedThreadId) {
+      toast.error('No chat selected');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete this chat? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteThread({ threadId: state.selectedThreadId as any });
+      await actions.selectThread(null);
+      toast.success('Chat deleted');
+      setOpen(false);
+    } catch (error) {
+      toast.error('Failed to delete chat');
+    }
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+    setOpen(false);
+  };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
+    <Command.Dialog
+      open={open}
+      onOpenChange={setOpen}
+      label="Command Menu"
+      className="fixed inset-0 z-50"
+    >
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        className="fixed inset-0 bg-black/50" 
+        onClick={() => setOpen(false)}
       />
-      
-      {/* Command Palette */}
-      <div className="relative min-h-screen flex items-start justify-center p-4 pt-[10vh]">
-        <div className="relative w-full max-w-2xl c3-glass-heavy rounded-2xl shadow-2xl overflow-hidden c3-animate-slide-up">
-          {/* Header */}
-          <div className="border-b border-[var(--c3-border-subtle)]">
-            <div className="flex items-center px-6 py-4">
-              <svg className="w-5 h-5 text-[var(--c3-text-tertiary)] mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                ref={inputRef}
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setSelectedIndex(0);
+      <div className="fixed inset-x-0 top-[20vh] mx-auto max-w-2xl">
+        <div className="bg-white rounded-lg shadow-2xl overflow-hidden">
+          <Command.Input
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Type a command or search..."
+            className="w-full px-4 py-3 text-lg border-b border-gray-200 focus:outline-none"
+          />
+          
+          <Command.List className="max-h-96 overflow-y-auto p-2">
+            <Command.Empty className="py-6 text-center text-sm text-gray-500">
+              No results found.
+            </Command.Empty>
+
+            {/* Quick Actions */}
+            <Command.Group heading="Quick Actions" className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+              <Command.Item
+                onSelect={handleNewChat}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Chat</span>
+                <kbd className="ml-auto text-xs bg-gray-100 px-1.5 py-0.5 rounded">⌘N</kbd>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={handleShare}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share Current Chat</span>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={() => {
+                  actions.exportThread?.(state.selectedThreadId as any, 'markdown');
+                  setOpen(false);
                 }}
-                placeholder="Type a command or search..."
-                className="flex-1 bg-transparent border-none outline-none text-lg text-[var(--c3-text-primary)] placeholder-[var(--c3-text-tertiary)]"
-              />
-              <kbd className="c3-kbd">ESC</kbd>
-            </div>
-            
-            {/* Category Pills */}
-            {!search && (
-              <div className="px-6 pb-3 flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setActiveCategory(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    activeCategory === null
-                      ? 'bg-[var(--c3-primary)] text-white'
-                      : 'bg-[var(--c3-surface-hover)] text-[var(--c3-text-secondary)] hover:text-[var(--c3-text-primary)]'
-                  }`}
-                >
-                  All
-                </button>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setActiveCategory(key)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                      activeCategory === key
-                        ? 'bg-[var(--c3-primary)] text-white'
-                        : 'bg-[var(--c3-surface-hover)] text-[var(--c3-text-secondary)] hover:text-[var(--c3-text-primary)]'
-                    }`}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export Chat</span>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={handleArchive}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Archive className="w-4 h-4" />
+                <span>Archive Chat</span>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={handleDelete}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100 text-red-600"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Chat</span>
+              </Command.Item>
+            </Command.Group>
+
+            {/* Recent Chats */}
+            {threads.length > 0 && (
+              <Command.Group heading="Recent Chats" className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+                {threads.slice(0, 5).map((thread) => (
+                  <Command.Item
+                    key={thread._id}
+                    value={thread.title}
+                    onSelect={() => handleSelectThread(thread._id)}
+                    className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
                   >
-                    {label}
-                  </button>
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="flex-1 truncate">{thread.title}</span>
+                    {thread._id === state.selectedThreadId && (
+                      <span className="text-xs text-blue-600">Current</span>
+                    )}
+                  </Command.Item>
                 ))}
-              </div>
+              </Command.Group>
             )}
-          </div>
-          
-          {/* Commands List */}
-          <div className="max-h-[60vh] overflow-y-auto c3-scrollbar">
-            {filteredCommands.length === 0 ? (
-              <div className="p-8 text-center text-[var(--c3-text-tertiary)]">
-                <p className="text-lg mb-2">No commands found</p>
-                <p className="text-sm">Try a different search term</p>
-              </div>
-            ) : (
-              <div className="py-2">
-                {Object.entries(groupedCommands).map(([category, cmds]) => (
-                  <div key={category}>
-                    <div className="px-6 py-2 text-xs font-semibold text-[var(--c3-text-tertiary)] uppercase tracking-wider">
-                      {categoryLabels[category as keyof typeof categoryLabels]}
-                    </div>
-                    {cmds.map((cmd, idx) => {
-                      const globalIndex = filteredCommands.indexOf(cmd);
-                      const isSelected = globalIndex === selectedIndex;
-                      
-                      return (
-                        <button
-                          key={cmd.id}
-                          onClick={cmd.action}
-                          onMouseEnter={() => setSelectedIndex(globalIndex)}
-                          className={`w-full px-6 py-3 flex items-center gap-3 transition-all ${
-                            isSelected
-                              ? 'bg-[var(--c3-surface-hover)] text-[var(--c3-text-primary)]'
-                              : 'hover:bg-[var(--c3-surface-hover)] text-[var(--c3-text-secondary)]'
-                          }`}
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-[var(--c3-bg-tertiary)] flex items-center justify-center text-lg">
-                            {typeof cmd.icon === 'string' ? cmd.icon : cmd.icon}
-                          </div>
-                          <div className="flex-1 text-left">
-                            <div className="font-medium">{cmd.title}</div>
-                            {cmd.description && (
-                              <div className="text-xs text-[var(--c3-text-tertiary)]">
-                                {cmd.description}
-                              </div>
-                            )}
-                          </div>
-                          {isSelected && (
-                            <kbd className="c3-kbd">↵</kbd>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {/* Footer */}
-          <div className="border-t border-[var(--c3-border-subtle)] px-6 py-3 flex items-center justify-between text-xs text-[var(--c3-text-tertiary)]">
-            <div className="flex gap-4">
-              <span className="flex items-center gap-1">
-                <kbd className="c3-kbd">↑↓</kbd> Navigate
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="c3-kbd">↵</kbd> Select
-              </span>
-              <span className="flex items-center gap-1">
-                <kbd className="c3-kbd">ESC</kbd> Close
-              </span>
-            </div>
-            <div>
-              {filteredCommands.length} commands
-            </div>
-          </div>
+
+            {/* Settings */}
+            <Command.Group heading="Settings" className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+              <Command.Item
+                onSelect={toggleTheme}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                <span>Toggle Theme</span>
+                <kbd className="ml-auto text-xs bg-gray-100 px-1.5 py-0.5 rounded">⌘T</kbd>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={() => {
+                  window.open('https://github.com/yourusername/c3chat', '_blank');
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span>Help & Documentation</span>
+              </Command.Item>
+            </Command.Group>
+
+            {/* AI Models */}
+            <Command.Group heading="AI Models" className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+              <Command.Item
+                onSelect={() => {
+                  // Switch to GPT-4
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Bot className="w-4 h-4" />
+                <span>GPT-4o</span>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={() => {
+                  // Switch to Claude
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <User className="w-4 h-4" />
+                <span>Claude 3 Opus</span>
+              </Command.Item>
+
+              <Command.Item
+                onSelect={() => {
+                  // Switch to Gemini
+                  setOpen(false);
+                }}
+                className="flex items-center gap-3 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Gemini 1.5 Pro</span>
+              </Command.Item>
+            </Command.Group>
+          </Command.List>
         </div>
       </div>
-    </div>
+    </Command.Dialog>
   );
 }

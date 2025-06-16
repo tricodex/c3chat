@@ -3,11 +3,14 @@ import { api } from "../convex/_generated/api";
 import { SignInForm } from "./SignInForm";
 import { Toaster } from "sonner";
 import { useState, useEffect } from "react";
-import { EnhancedSyncProvider } from "./lib/corrected-sync-engine";
+import { EnhancedSyncProvider } from "./lib/corrected-sync-engine.tsx";
 import { Sidebar } from "./components/Sidebar";
 import { ChatView } from "./components/ChatView";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Header } from "./components/Header";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { CommandPalette } from "./components/CommandPalette";
+import { OfflineTest } from "./components/OfflineTest";
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -26,20 +29,22 @@ export default function App() {
   }, [theme]);
 
   return (
-    <div id="root">
-      <Toaster 
-        position="top-center"
-        toastOptions={{
-          style: {
-            background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
-            color: 'var(--c3-text-primary)',
-            border: '1px solid var(--c3-border-subtle)',
-            borderRadius: 'var(--c3-radius-lg)',
-          },
-        }}
-      />
-      <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-    </div>
+    <ErrorBoundary>
+      <div id="root">
+        <Toaster 
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
+              color: 'var(--c3-text-primary)',
+              border: '1px solid var(--c3-border-subtle)',
+              borderRadius: 'var(--c3-radius-lg)',
+            },
+          }}
+        />
+        <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      </div>
+    </ErrorBoundary>
   );
 }
 
@@ -66,14 +71,16 @@ function Content({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
       </Unauthenticated>
 
       <Authenticated>
-        <EnhancedSyncProvider>
-          <AuthenticatedApp 
-            theme={theme} 
-            setTheme={setTheme}
-            sidebarOpen={sidebarOpen}
-            setSidebarOpen={setSidebarOpen}
-          />
-        </EnhancedSyncProvider>
+        <ErrorBoundary>
+          <EnhancedSyncProvider>
+            <AuthenticatedApp 
+              theme={theme} 
+              setTheme={setTheme}
+              sidebarOpen={sidebarOpen}
+              setSidebarOpen={setSidebarOpen}
+            />
+          </EnhancedSyncProvider>
+        </ErrorBoundary>
       </Authenticated>
     </>
   );
@@ -99,6 +106,12 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
 
   return (
     <div className="c3-layout">
+      {/* Command Palette - accessible from anywhere */}
+      <CommandPalette theme={theme} setTheme={setTheme} />
+      
+      {/* Offline Test Component - for testing */}
+      {process.env.NODE_ENV === 'development' && <OfflineTest />}
+      
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (
         <div 

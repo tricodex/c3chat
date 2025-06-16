@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { ModelSelector } from "./ModelSelector";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/corrected-sync-engine";
+import { FileUpload } from "./FileUpload";
+import { BranchDialog } from "./BranchDialog";
+import { CollaborationPresence } from "./CollaborationPresence";
+import { VirtualMessageList } from "./VirtualMessageList";
+import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/corrected-sync-engine.tsx";
+import { Paperclip, GitBranch, MoreVertical } from "lucide-react";
 
 export function ChatInterface() {
   const { state, actions } = useEnhancedSync();
@@ -11,6 +16,11 @@ export function ChatInterface() {
   
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [showBranchDialog, setShowBranchDialog] = useState(false);
+  const [branchMessageId, setBranchMessageId] = useState<string | null>(null);
+  const [showMessageActions, setShowMessageActions] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,8 +68,19 @@ export function ChatInterface() {
         // The backend will handle image generation
         await actions.sendMessage(messageContent, selectedThread._id);
       } else {
-        // Send regular message with optimistic updates
-        await actions.sendMessage(messageContent, selectedThread._id);
+        // Send regular message with optimistic updates and attachments
+        await actions.sendMessage(
+          messageContent,
+          selectedThread._id,
+          undefined,
+          undefined,
+          undefined,
+          attachmentIds.length > 0 ? attachmentIds : undefined
+        );
+        
+        // Clear attachments after sending
+        setAttachmentIds([]);
+        setShowFileUpload(false);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to send message");
@@ -82,12 +103,25 @@ export function ChatInterface() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    // TODO: Implement file upload functionality
-    toast.info("File upload coming soon!");
+  const handleFileUpload = (uploadedAttachmentIds: string[]) => {
+    setAttachmentIds(prev => [...prev, ...uploadedAttachmentIds]);
+  };
+  
+  const toggleFileUpload = () => {
+    setShowFileUpload(!showFileUpload);
+  };
+  
+  const handleBranch = (messageId?: string) => {
+    setBranchMessageId(messageId || null);
+    setShowBranchDialog(true);
+  };
+  
+  const handleBranchCreated = (newThreadId: string) => {
+    // Select the new branch
+    actions.selectThread(newThreadId);
+    setShowBranchDialog(false);
+    setBranchMessageId(null);
+    toast.success('Switched to new branch');
   };
 
   const handleMessageUpdate = async (messageId: string, updates: any) => {
@@ -120,7 +154,7 @@ export function ChatInterface() {
       <div className="border-b bg-white">
         <div className="p-4">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <h2 className="font-semibold text-lg text-gray-900">{selectedThread.title}</h2>
               {selectedThread.isOptimistic && (
                 <p className="text-sm text-gray-500 flex items-center gap-1">
@@ -132,6 +166,15 @@ export function ChatInterface() {
                 <p className="text-sm text-blue-600">💾 Syncing changes...</p>
               )}
             </div>
+            
+            {/* Branch button */}
+            <button
+              onClick={() => handleBranch()}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Branch conversation"
+            >
+              <GitBranch className="w-5 h-5" />
+            </button>
             {state.isOnline ? (
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -151,11 +194,16 @@ export function ChatInterface() {
           onSelect={handleModelChange}
           compact={true}
         />
+        
+        {/* Collaboration presence */}
+        {selectedThread.isPublic && (
+          <CollaborationPresence threadId={selectedThread._id} />
+        )}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-        {messages.length === 0 ? (
+      {messages.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           <div className="text-center text-gray-500 mt-8">
             <div className="text-6xl mb-4">💬</div>
             <p className="text-lg font-medium mb-2">Start a conversation</p>
@@ -166,98 +214,47 @@ export function ChatInterface() {
               <p className="text-sm italic text-gray-400">"Write a Python function to sort a list"</p>
             </div>
           </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message._id}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              } ${message.isOptimistic ? 'opacity-70' : ''}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 relative ${
-                  message.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-900 shadow-sm border border-gray-200"
-                }`}
-              >
-                {/* Optimistic indicator */}
-                {message.isOptimistic && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-400 rounded-full animate-pulse" />
-                )}
-                
-                {/* Local changes indicator */}
-                {message.hasLocalChanges && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full" title="Syncing..." />
-                )}
+        </div>
+      ) : (
+        <VirtualMessageList
+          messages={messages}
+          onBranch={handleBranch}
+          showMessageActions={showMessageActions}
+          onToggleMessageActions={setShowMessageActions}
+        />
+      )}
 
-                {message.role === "assistant" ? (
-                  <>
-                    <MarkdownRenderer content={message.content} />
-                    {message.cursor && (
-                      <span className="inline-block w-2 h-5 bg-gray-400 ml-1 animate-pulse" />
-                    )}
-                    {message.isStreaming && !message.content && (
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600" />
-                        <span className="text-sm">Thinking...</span>
-                      </div>
-                    )}
-                    {message.generatedImageUrl && (
-                      <img 
-                        src={message.generatedImageUrl} 
-                        alt="Generated image" 
-                        className="mt-2 rounded-lg max-w-full"
-                      />
-                    )}
-                  </>
-                ) : (
-                  <div className="whitespace-pre-wrap">{message.content}</div>
-                )}
-                
-                {/* Token usage */}
-                {message.outputTokens && (
-                  <div className="text-xs opacity-70 mt-2">
-                    {message.inputTokens} → {message.outputTokens} tokens
-                  </div>
-                )}
-
-                {/* Message timestamp for debugging */}
-                {message.localCreatedAt && (
-                  <div className="text-xs opacity-50 mt-1">
-                    {new Date(message.localCreatedAt).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      {/* File Upload Panel */}
+      {showFileUpload && (
+        <div className="p-4 border-t bg-gray-50">
+          <FileUpload
+            threadId={selectedThread._id}
+            onUploadComplete={handleFileUpload}
+          />
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-4 border-t bg-white">
         <form onSubmit={handleSubmit} className="flex space-x-2">
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+            onClick={toggleFileUpload}
+            className={`p-2 transition-colors ${
+              showFileUpload || attachmentIds.length > 0 
+                ? 'text-blue-600 hover:text-blue-700' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
             title="Attach file"
             disabled={isSending}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-            </svg>
+            <Paperclip className="w-6 h-6" />
+            {attachmentIds.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {attachmentIds.length}
+              </span>
+            )}
           </button>
-          
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
           
           <textarea
             value={input}
@@ -298,6 +295,19 @@ export function ChatInterface() {
           )}
         </div>
       </div>
+      
+      {/* Branch Dialog */}
+      {showBranchDialog && selectedThread && (
+        <BranchDialog
+          threadId={selectedThread._id}
+          messageId={branchMessageId as any}
+          onClose={() => {
+            setShowBranchDialog(false);
+            setBranchMessageId(null);
+          }}
+          onBranchCreated={handleBranchCreated as any}
+        />
+      )}
     </div>
   );
 }

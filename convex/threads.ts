@@ -460,7 +460,7 @@ export const exportThread = action({
     mimeType: v.string(),
     filename: v.string(),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{content: string; mimeType: string; filename: string}> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -513,7 +513,7 @@ export const exportThread = action({
             provider: thread.provider,
             model: thread.model,
           },
-          messages: messages.map(m => ({
+          messages: messages.map((m: any) => ({
             id: m._id,
             role: m.role,
             content: m.content,

@@ -6,6 +6,7 @@ import { api, internal } from "./_generated/api";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { Id } from "./_generated/dataModel";
+import { StreamBuffer, TokenCounter, retryWithBackoff, isRetryableError } from "./utils/streamBuffer";
 
 // Provider clients initialization
 const createOpenAIClient = (apiKey: string, baseURL?: string) => {
@@ -19,14 +20,14 @@ const createGoogleClient = (apiKey: string) => {
   return new GoogleGenAI({ apiKey });
 };
 
-// For Anthropic, we'll use OpenAI SDK with a different base URL
-const createAnthropicClient = (apiKey: string) => {
-  // Using OpenAI SDK for Anthropic with baseURL hack
+// For all non-OpenAI/Google models, use OpenRouter
+const createOpenRouterClient = (apiKey: string) => {
   return new OpenAI({
     apiKey,
-    baseURL: "https://api.anthropic.com/v1",
+    baseURL: "https://openrouter.ai/api/v1",
     defaultHeaders: {
-      "anthropic-version": "2023-06-01",
+      "HTTP-Referer": "https://c3chat.app",
+      "X-Title": "C3Chat",
     },
   });
 };
@@ -108,30 +109,40 @@ export const sendMessage: any = action({
 
           const client = createOpenAIClient(apiKey, baseURL);
           
-          const stream = await client.chat.completions.create({
-            model: args.model,
-            messages: conversationHistory,
-            stream: true,
-            ...(args.provider === "openrouter" && {
-              headers: {
-                "HTTP-Referer": "https://c3chat.app",
-                "X-Title": "C3Chat",
-              },
-            }),
+          const streamBuffer = new StreamBuffer();
+          
+          const stream = await retryWithBackoff(async () => {
+            return await client.chat.completions.create({
+              model: args.model,
+              messages: conversationHistory,
+              stream: true,
+              ...(args.provider === "openrouter" && {
+                headers: {
+                  "HTTP-Referer": "https://c3chat.app",
+                  "X-Title": "C3Chat",
+                },
+              }),
+            });
           });
 
           for await (const chunk of stream) {
             const delta = chunk.choices[0]?.delta?.content || "";
             if (delta) {
-              fullContent += delta;
+              streamBuffer.add(delta);
               
-              // Update message content in real-time
-              await ctx.runMutation(internal.messages.updateContent, {
-                messageId: assistantMessageId,
-                content: fullContent,
-                isStreaming: true,
-                cursor: true,
-              });
+              // Buffer updates for smoother UI
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                // Update message content in real-time
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
             }
 
             // Extract usage if available
@@ -139,6 +150,11 @@ export const sendMessage: any = action({
               inputTokens = chunk.usage.prompt_tokens || 0;
               outputTokens = chunk.usage.completion_tokens || 0;
             }
+          }
+          
+          // Flush any remaining content
+          if (streamBuffer.hasContent()) {
+            fullContent += streamBuffer.forceFlush();
           }
           break;
         }
@@ -180,15 +196,29 @@ export const sendMessage: any = action({
           break;
         }
 
-        case "anthropic": {
-          const apiKey = args.apiKey || process.env.CONVEX_ANTHROPIC_API_KEY;
-          if (!apiKey) throw new Error("Anthropic API key required");
+        case "anthropic":
+        case "groq":
+        case "together":
+        case "fireworks":
+        case "deepseek":
+        case "mistral":
+        case "cohere": {
+          // Use OpenRouter for all these providers
+          const apiKey = args.apiKey || process.env.CONVEX_OPENROUTER_API_KEY;
+          if (!apiKey) throw new Error("OpenRouter API key required for " + args.provider);
 
-          // Using OpenAI SDK format for Anthropic
-          const client = createAnthropicClient(apiKey);
+          const client = createOpenRouterClient(apiKey);
+          
+          // Map model names to OpenRouter format
+          let openRouterModel = args.model;
+          if (args.provider === "anthropic") {
+            openRouterModel = args.model.includes("claude") ? args.model : `anthropic/${args.model}`;
+          } else {
+            openRouterModel = `${args.provider}/${args.model}`;
+          }
           
           const stream = await client.chat.completions.create({
-            model: args.model,
+            model: openRouterModel,
             messages: conversationHistory,
             stream: true,
             max_tokens: 4096,
@@ -449,35 +479,69 @@ export const sendMessageWithContext = action({
   },
 });
 
-// Web search function
+// Web search function using Serper API (faster and more reliable)
 async function searchWeb(query: string) {
-  const apiKey = process.env.CONVEX_BRAVE_SEARCH_API_KEY;
-  if (!apiKey) {
-    console.warn("Brave Search API key not configured");
-    return [];
-  }
-
-  const response = await fetch(
-    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-    {
-      headers: {
-        "Accept": "application/json",
-        "X-Subscription-Token": apiKey,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Search failed: ${response.statusText}`);
-  }
-
-  const data = await response.json();
+  // Try Serper first, fall back to Brave if not configured
+  const serperKey = process.env.CONVEX_SERPER_API_KEY;
+  const braveKey = process.env.CONVEX_BRAVE_SEARCH_API_KEY;
   
-  return data.web?.results?.slice(0, 5).map((result: any) => ({
-    title: result.title,
-    url: result.url,
-    snippet: result.description,
-  })) || [];
+  if (serperKey) {
+    try {
+      const response = await fetch("https://google.serper.dev/search", {
+        method: "POST",
+        headers: {
+          "X-API-KEY": serperKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          q: query,
+          num: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Serper search failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      return data.organic?.slice(0, 5).map((result: any) => ({
+        title: result.title,
+        url: result.link,
+        snippet: result.snippet,
+      })) || [];
+    } catch (error) {
+      console.error("Serper search failed, trying Brave:", error);
+    }
+  }
+  
+  // Fallback to Brave Search
+  if (braveKey) {
+    const response = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      {
+        headers: {
+          "Accept": "application/json",
+          "X-Subscription-Token": braveKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Brave search failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    return data.web?.results?.slice(0, 5).map((result: any) => ({
+      title: result.title,
+      url: result.url,
+      snippet: result.description,
+    })) || [];
+  }
+  
+  console.warn("No search API key configured (CONVEX_SERPER_API_KEY or CONVEX_BRAVE_SEARCH_API_KEY)");
+  return [];
 }
 
 // Store search results for a message

@@ -70,7 +70,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     
-    let templates = [];
+    let templates: any[] = [];
 
     // Get user's templates if authenticated
     if (userId) {
@@ -109,7 +109,7 @@ export const list = query({
         t.name.toLowerCase().includes(query) ||
         t.description?.toLowerCase().includes(query) ||
         t.prompt.toLowerCase().includes(query) ||
-        t.tags?.some(tag => tag.toLowerCase().includes(query))
+        t.tags?.some((tag: string) => tag.toLowerCase().includes(query))
       );
     }
 

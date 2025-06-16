@@ -419,7 +419,7 @@ async function checkPermission(
     viewer: 1,
   };
 
-  return roleHierarchy[membership.role] >= roleHierarchy[requiredRole];
+  return roleHierarchy[membership.role as keyof typeof roleHierarchy] >= roleHierarchy[requiredRole as keyof typeof roleHierarchy];
 }
 
 // Get project statistics
