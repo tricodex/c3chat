@@ -197,12 +197,12 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       const existingMessages = state.messages[action.payload.threadId] || [];
       
       // Keep optimistic messages that are still in-flight
-      // (created within last 2 seconds to handle server round-trip time)
+      // (created within last 5 seconds to handle server round-trip time)
       const now = Date.now();
       const inFlightOptimisticMessages = existingMessages.filter(m => 
         m.isOptimistic && 
         m.localCreatedAt && 
-        (now - m.localCreatedAt) < 2000
+        (now - m.localCreatedAt) < 5000
       );
       
       // Create a map for deduplication - Convex messages take precedence
@@ -561,14 +561,21 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   // Debug log for messages query
   useEffect(() => {
-    console.log('🔍 Convex messages query:', {
+    console.log('🔍 Convex messages query result:', {
       selectedThreadId: state.selectedThreadId,
       queryThreadId: selectedThreadIdForQuery,
       rawResult: convexMessagesRaw,
       messageCount: convexMessages.length,
-      firstMessage: convexMessages[0]
+      messages: convexMessages.map(m => ({
+        id: m._id,
+        role: m.role,
+        content: m.content ? m.content.substring(0, 50) + '...' : '[empty]',
+        isStreaming: m.isStreaming,
+        cursor: m.cursor,
+        hasContent: !!m.content && m.content.length > 0
+      }))
     });
-  }, [convexMessagesRaw, selectedThreadIdForQuery]);
+  }, [convexMessages, state.selectedThreadId]);
 
   // Convex mutations
   const createThreadMutation = useMutation(api.threads.create);
@@ -615,6 +622,21 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       mountedRef.current = false;
     };
   }, []);
+
+  // Cleanup old optimistic messages periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (state.selectedThreadId) {
+        const cutoffTime = Date.now() - 10000; // 10 seconds
+        dispatch({
+          type: 'CLEANUP_OLD_OPTIMISTIC_MESSAGES',
+          payload: { threadId: state.selectedThreadId, cutoffTime }
+        });
+      }
+    }, 5000); // Run every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [state.selectedThreadId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -832,8 +854,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const memoizedConvexMessages = useMemo(() => {
     // Create a hash that includes both IDs and content to detect any changes
     const messageHash = convexMessages.map(m => 
-      `${m._id}:${m.content?.length || 0}:${m.isStreaming}:${m.cursor}`
+      `${m._id}:${m.content?.length || 0}:${m.isStreaming}:${m.cursor}:${m._creationTime}`
     ).sort().join('|');
+    console.log('📊 Message hash updated:', {
+      hash: messageHash,
+      messageCount: convexMessages.length
+    });
     return { messages: convexMessages, hash: messageHash };
   }, [convexMessages]);
 
@@ -844,6 +870,14 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   // Sync messages to local state
   useEffect(() => {
+    console.log('🔄 Sync effect triggered:', {
+      selectedThreadId: state.selectedThreadId,
+      isInitialized: state.isInitialized,
+      messageHash: memoizedConvexMessages.hash,
+      messageCount: memoizedConvexMessages.messages.length,
+      convexMessagesCount: convexMessages.length
+    });
+    
     if (!state.selectedThreadId || !state.isInitialized) return;
     
     // Store the thread ID at the time of this effect
@@ -855,6 +889,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     // If the query is skipped, don't update
     if (!queryThreadId) {
+      console.log('⏭️ Skipping sync - query is skipped for temp thread');
       return;
     }
     
@@ -903,7 +938,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       syncMessagesToLocal();
     }
-  }, [memoizedConvexMessages.hash, state.selectedThreadId, state.isInitialized]); // Use memoized hash to detect content changes
+  }, [convexMessages, state.selectedThreadId, state.isInitialized]); // Use convexMessages directly to ensure we catch all updates
 
   // Save selected thread to metadata when thread changes
   useEffect(() => {

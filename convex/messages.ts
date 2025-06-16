@@ -24,6 +24,19 @@ export const list = query({
       .order("asc")
       .collect();
 
+    console.log("📨 Messages query for thread:", {
+      threadId: args.threadId,
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        id: m._id,
+        role: m.role,
+        contentLength: m.content?.length || 0,
+        isStreaming: m.isStreaming,
+        cursor: m.cursor,
+        contentPreview: m.content ? m.content.substring(0, 30) + '...' : '[empty]'
+      }))
+    });
+
     return messages;
   },
 });
@@ -113,6 +126,14 @@ export const updateContent = internalMutation({
     generatedImageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    console.log("📝 Updating message content:", {
+      messageId: args.messageId,
+      contentLength: args.content.length,
+      isStreaming: args.isStreaming,
+      cursor: args.cursor,
+      contentPreview: args.content.substring(0, 50) + '...'
+    });
+    
     const updates: any = {
       content: args.content,
     };
@@ -124,6 +145,8 @@ export const updateContent = internalMutation({
     if (args.generatedImageUrl !== undefined) updates.generatedImageUrl = args.generatedImageUrl;
     
     await ctx.db.patch(args.messageId, updates);
+    
+    console.log("✅ Message updated successfully");
   },
 });
 
