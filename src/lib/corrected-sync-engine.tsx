@@ -1026,9 +1026,6 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
 
       try {
-        // Remove optimistic message first
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
-        
         // Get thread info for AI settings
         const thread = state.threads.find(t => t._id === threadId);
         if (!thread) throw new Error('Thread not found');
@@ -1052,6 +1049,9 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           attachmentIds: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
           systemPrompt: agentId ? getAgentSystemPrompt(agentId) : undefined,
         });
+        
+        // Only remove optimistic message after successful send
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
         
         console.log('✅ Message sent and AI response generated');
       } catch (error) {
