@@ -5,7 +5,6 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { Id } from "./_generated/dataModel";
 import { StreamBuffer, TokenCounter, retryWithBackoff, isRetryableError } from "./utils/streamBuffer";
 
 // Provider clients initialization
@@ -165,19 +164,19 @@ export const sendMessage: any = action({
 
           const genAI = createGoogleClient(apiKey);
 
-          // Convert messages to Google format
-          const googleHistory = conversationHistory.map((msg: any) => ({
+          // Convert messages to new Google format - the new API expects simple string/Content format
+          const googleContents = conversationHistory.map((msg: any) => ({
             role: msg.role === "assistant" ? "model" : "user",
             parts: [{ text: msg.content }],
           }));
 
           const googleResponse = await genAI.models.generateContentStream({
             model: args.model,
-            contents: googleHistory,
+            contents: googleContents,
           });
 
           for await (const chunk of googleResponse) {
-            const delta = chunk.text || "";
+            const delta = chunk.text;
             if (delta) {
               fullContent += delta;
               

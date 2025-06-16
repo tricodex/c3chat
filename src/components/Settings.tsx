@@ -335,15 +335,15 @@ export function Settings({ isOpen, onClose }: SettingsModalProps) {
           {activeTab === 'about' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-base font-medium text-[var(--c3-text-primary)] mb-3">About C3Chat</h3>
-                <p className="text-xs text-[var(--c3-text-tertiary)] mb-4">
-                  A modern AI chat application with local-first architecture and real-time sync.
+                <h3 className="text-base font-medium text-[var(--c3-text-primary)] mb-3" style={{ fontFamily: 'var(--c3-font-mono)' }}>About C3CHAT</h3>
+                <p className="text-xs text-[var(--c3-text-tertiary)] mb-4" style={{ fontFamily: 'var(--c3-font-mono)' }}>
+                  A minimal AI chat application with monospace design and real-time sync.
                 </p>
               </div>
 
               <div className="p-6 c3-premium-card rounded-lg">
                 <div className="text-center relative z-10">
-                  <h1 className="text-2xl font-bold c3-gradient-text mb-2">C3Chat</h1>
+                  <h1 className="text-2xl font-normal text-[var(--c3-text-primary)] mb-2" style={{ fontFamily: 'var(--c3-font-mono)', letterSpacing: '0.1em' }}>C3CHAT</h1>
                   <p className="text-[var(--c3-text-secondary)] mb-3 text-sm">AI-powered chat with multiple providers</p>
                   <div className="flex justify-center space-x-3 text-xs text-[var(--c3-text-muted)]">
                     <span>Version 1.0.0</span>

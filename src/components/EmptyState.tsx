@@ -64,18 +64,6 @@ export function EmptyState() {
           <p className="text-sm" style={{ color: 'var(--c3-text-tertiary)' }}>
             Select or create a chat from the sidebar to get started
           </p>
-          
-          {/* Keyboard Shortcuts */}
-          <div className="mt-8 inline-flex gap-4 text-xs" style={{ color: 'var(--c3-text-muted)' }}>
-            <kbd className="c3-kbd">⌘K</kbd>
-            <span>Quick Search</span>
-            <span style={{ color: 'var(--c3-border-primary)' }}>•</span>
-            <kbd className="c3-kbd">⌘N</kbd>
-            <span>New Chat</span>
-            <span style={{ color: 'var(--c3-border-primary)' }}>•</span>
-            <kbd className="c3-kbd">⌘/</kbd>
-            <span>Commands</span>
-          </div>
         </div>
       </div>
     </div>

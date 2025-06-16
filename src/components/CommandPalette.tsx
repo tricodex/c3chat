@@ -146,7 +146,6 @@ export function CommandPalette({ theme, setTheme }: CommandPaletteProps) {
               >
                 <Plus className="w-4 h-4" />
                 <span>New Chat</span>
-                <kbd className="ml-auto text-xs bg-gray-100 px-1.5 py-0.5 rounded">⌘N</kbd>
               </Command.Item>
 
               <Command.Item
@@ -213,7 +212,6 @@ export function CommandPalette({ theme, setTheme }: CommandPaletteProps) {
               >
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 <span>Toggle Theme</span>
-                <kbd className="ml-auto text-xs bg-gray-100 px-1.5 py-0.5 rounded">⌘T</kbd>
               </Command.Item>
 
               <Command.Item

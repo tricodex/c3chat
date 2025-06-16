@@ -84,3 +84,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - File uploads use Convex storage with automatic URL generation
 - Vector search powered by Convex's built-in vector indexes
 - Deployment: `npx convex deploy` for production
+
+## CRITICAL: Package Dependencies
+- **Google AI**: ALWAYS use `@google/genai` version ^1.5.1 (NOT `@google/generative-ai` which is deprecated)
+  - Correct import: `import { GoogleGenAI } from "@google/genai";`
+  - Initialize: `new GoogleGenAI({ apiKey: 'YOUR_KEY' });`
+  - Use: `await genAI.models.generateContentStream({ model: 'gemini-2.0-flash', contents: ... });`
+  - The new SDK is the unified SDK for all Google GenAI models (Gemini, Veo, Imagen, etc.)
+- **Package Manager**: Use `bun` (NOT npm) for all operations

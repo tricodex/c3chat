@@ -8,8 +8,9 @@ import { FileUpload } from "./FileUpload";
 import { ModelSelector } from "./ModelSelector";
 import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
+import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen } from "lucide-react";
 import { getStoredApiKey } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
@@ -188,59 +189,79 @@ export function ChatView() {
             
             {/* Feature Toggles */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setEnableWebSearch(!enableWebSearch)}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all ${
-                  enableWebSearch 
-                    ? 'bg-[var(--c3-primary)]/10 text-[var(--c3-primary)] border border-[var(--c3-primary)]' 
-                    : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)]'
-                }`}
-                title="Enable web search for all messages"
+              <Tooltip 
+                content={enableWebSearch ? "Disable web search" : "Enable real-time web search for all messages"}
+                position="bottom"
+                delay={300}
               >
-                <Globe className="w-4 h-4" />
-                <span className="hidden sm:inline">Web Search</span>
-              </button>
+                <button
+                  onClick={() => setEnableWebSearch(!enableWebSearch)}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all font-mono ${
+                    enableWebSearch 
+                      ? 'bg-[var(--c3-primary)]/15 text-[var(--c3-primary)] border border-[var(--c3-primary)] shadow-sm' 
+                      : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)] hover:bg-[var(--c3-surface-hover)]'
+                  }`}
+                  aria-label={enableWebSearch ? "Disable web search" : "Enable web search"}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span className="hidden sm:inline">Web Search</span>
+                  {enableWebSearch && <div className="w-2 h-2 bg-[var(--c3-primary)] rounded-full animate-pulse ml-1" />}
+                </button>
+              </Tooltip>
               
-              <button
-                onClick={() => setIsDeepResearchMode(!isDeepResearchMode)}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all ${
-                  isDeepResearchMode 
-                    ? 'bg-[var(--c3-primary)]/10 text-[var(--c3-primary)] border border-[var(--c3-primary)]' 
-                    : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)]'
-                }`}
-                title="Enable deep research mode for comprehensive answers"
+              <Tooltip 
+                content={isDeepResearchMode ? "Disable deep research" : "Enable deep research mode with multiple search queries and comprehensive analysis"}
+                position="bottom"
+                delay={300}
               >
-                <Brain className="w-4 h-4" />
-                <span className="hidden sm:inline">Deep Research</span>
-              </button>
+                <button
+                  onClick={() => setIsDeepResearchMode(!isDeepResearchMode)}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all font-mono ${
+                    isDeepResearchMode 
+                      ? 'bg-[var(--c3-primary)]/15 text-[var(--c3-primary)] border border-[var(--c3-primary)] shadow-sm' 
+                      : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)] hover:bg-[var(--c3-surface-hover)]'
+                  }`}
+                  aria-label={isDeepResearchMode ? "Disable deep research" : "Enable deep research"}
+                >
+                  <Brain className="w-4 h-4" />
+                  <span className="hidden sm:inline">Deep Research</span>
+                  {isDeepResearchMode && <div className="w-2 h-2 bg-[var(--c3-primary)] rounded-full animate-pulse ml-1" />}
+                </button>
+              </Tooltip>
             </div>
           </div>
           
           {/* Thread Actions */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => actions.createBranch(selectedThread._id)}
-              className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-              title="Create conversation branch"
-            >
-              <GitBranch className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-            </button>
+            <Tooltip content="Create a conversation branch from this point" position="bottom">
+              <button
+                onClick={() => actions.createBranch && actions.createBranch(selectedThread._id)}
+                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
+                aria-label="Create conversation branch"
+              >
+                <GitBranch className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+              </button>
+            </Tooltip>
             
-            <button
-              onClick={() => actions.exportThread(selectedThread._id, "markdown")}
-              className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-              title="Export conversation"
-            >
-              <Download className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-            </button>
+            <Tooltip content="Export conversation as Markdown" position="bottom">
+              <button
+                onClick={() => actions.exportThread && actions.exportThread(selectedThread._id, "markdown")}
+                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
+                aria-label="Export conversation"
+              >
+                <Download className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+              </button>
+            </Tooltip>
             
-            <button
-              onClick={() => toast.info("Analytics coming soon!")}
-              className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-              title="View token usage"
-            >
-              <ChartBar className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-            </button>
+            <Tooltip content="View token usage analytics (coming soon)" position="bottom">
+              <button
+                onClick={() => toast.info("Analytics coming soon!")}
+                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
+                aria-label="View token usage"
+              >
+                <ChartBar className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+              </button>
+            </Tooltip>
           </div>
         </div>
         

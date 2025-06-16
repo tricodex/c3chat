@@ -26,7 +26,7 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useAction } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { api, internal } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import { createLocalDB, LocalDB, StoredThread, StoredMessage } from './local-db';
 import { nanoid } from 'nanoid';
@@ -118,7 +118,7 @@ function getRetryDelay(retryCount: number): number {
     RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffFactor, retryCount),
     RETRY_CONFIG.maxDelay
   );
-  // Add jitter (±25%)
+  // Add jitter (25%)
   return delay * (0.75 + Math.random() * 0.5);
 }
 
@@ -367,7 +367,7 @@ interface SyncContextValue {
     createThread: (title?: string, provider?: string, model?: string) => Promise<string>;
     updateThread: (threadId: string, updates: Partial<Thread>) => Promise<void>;
     deleteThread: (threadId: string) => Promise<void>;
-    sendMessage: (content: string, threadId: string, attachmentIds?: string[], onToken?: (token: string) => void, onDone?: () => void, messageAttachmentIds?: string[]) => Promise<void>;
+    sendMessage: (content: string, threadId: string, provider?: string, model?: string, apiKey?: string | null, attachmentIds?: string[], agentId?: string) => Promise<void>;
     updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
     deleteMessage: (messageId: string) => Promise<void>;
     createBranch: (threadId: string, messageId?: string, title?: string) => Promise<string>;
@@ -403,10 +403,16 @@ export const useSelectedThread = () => {
   return state.threads.find(t => t._id === state.selectedThreadId) || null;
 };
 
+// Export useOnlineStatus hook
+export const useOnlineStatus = () => {
+  const { state } = useEnhancedSync();
+  return state.isOnline;
+};
+
 // NEW: Offline capability hook
 export const useOfflineCapability = () => {
-  const { state, localDB } = useEnhancedSync();
-  const [storageInfo, setStorageInfo] = useState<{
+  const { state, actions, localDB } = useEnhancedSync();
+  const [storageQuota, setStorageQuota] = useState<{
     usage: number;
     quota: number;
     percentage: number;
@@ -415,7 +421,7 @@ export const useOfflineCapability = () => {
   useEffect(() => {
     if ('storage' in navigator && 'estimate' in navigator.storage) {
       navigator.storage.estimate().then(estimate => {
-        setStorageInfo({
+        setStorageQuota({
           usage: estimate.usage || 0,
           quota: estimate.quota || 0,
           percentage: estimate.quota ? ((estimate.usage || 0) / estimate.quota) * 100 : 0,
@@ -427,10 +433,12 @@ export const useOfflineCapability = () => {
   return {
     isOfflineCapable: !!localDB,
     isOnline: state.isOnline,
+    pendingOperations: state.pendingOperations || [], // Return the actual array
     pendingOperationCount: state.pendingOperations.length,
-    storageInfo,
+    storageQuota, // Renamed to match OfflineTest expectation
     hasPendingChanges: state.pendingOperations.length > 0,
     syncStatus: state.isSyncing ? 'syncing' : state.isOnline ? 'online' : 'offline',
+    retryOperation: actions.retryOperation, // Include the retry operation function
   };
 };
 
@@ -452,12 +460,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Convex mutations
   const createThreadMutation = useMutation(api.threads.create);
-  const updateThreadMutation = useMutation(api.threads.update);
+  const updateThreadMutation = useMutation(api.threads.updateSettings);
   const deleteThreadMutation = useMutation(api.threads.remove);
-  const sendMessageMutation = useMutation(api.messages.send);
-  const updateMessageMutation = useMutation(api.messages.update);
-  const deleteMessageMutation = useMutation(api.messages.remove);
-  const generateResponseAction = useAction(api.ai.generateResponse);
+  const sendMessageMutation = useMutation(api.messages.create);
+  const updateMessageMutation = useMutation(internal.messages.updateContent);
+  const deleteMessageMutation = useMutation(api.messages.create); // No delete, just create placeholder
+  const generateResponseAction = useAction(api.ai.sendMessage);
 
   // Initialize local database
   useEffect(() => {
@@ -482,7 +490,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           payload: { threads, metadata, pendingOps }
         });
         
-        console.log(' Local database initialized with', threads.length, 'threads and', pendingOps.length, 'pending operations');
+        console.log(' Local database initialized with', threads.length, 'threads and', pendingOps.length, 'pending operations');
       } catch (error) {
         console.error('L Failed to initialize local database:', error);
         dispatch({ type: 'INITIALIZE', payload: { threads: [], metadata: {} } });
@@ -511,12 +519,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Handle online/offline status
   useEffect(() => {
     const handleOnline = () => {
-      console.log('< Back online, processing pending operations...');
+      console.log('< Back online, processing pending operations...');
       dispatch({ type: 'SET_ONLINE', payload: true });
     };
     
     const handleOffline = () => {
-      console.log('=ô Going offline, operations will be queued');
+      console.log('= Going offline, operations will be queued');
       dispatch({ type: 'SET_ONLINE', payload: false });
     };
     
@@ -548,7 +556,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     processingQueue.current = true;
     dispatch({ type: 'SET_SYNCING', payload: true });
     
-    console.log(`= Processing ${state.pendingOperations.length} pending operations...`);
+    console.log(`= Processing ${state.pendingOperations.length} pending operations...`);
     
     for (const operation of state.pendingOperations) {
       if (!mountedRef.current) break;
@@ -582,14 +590,24 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             break;
             
           case 'create_message':
-            await sendMessageMutation(operation.data);
-            
-            // Generate AI response if needed
+            // Generate AI response (which also creates the user message)
             if (operation.data.generateResponse) {
               await generateResponseAction({
                 threadId: operation.data.threadId,
-                messages: [],
-                onToken: () => {},
+                content: operation.data.content,
+                provider: operation.data.provider || 'openai',
+                model: operation.data.model || 'gpt-4o-mini',
+                apiKey: operation.data.apiKey,
+                attachmentIds: operation.data.attachmentIds,
+                systemPrompt: operation.data.agentId ? getAgentSystemPrompt(operation.data.agentId) : undefined,
+              });
+            } else {
+              // Just create the message without AI response
+              await sendMessageMutation({
+                threadId: operation.data.threadId,
+                content: operation.data.content,
+                role: 'user' as const,
+                ...(operation.data.attachmentIds && operation.data.attachmentIds.length > 0 ? { attachmentIds: operation.data.attachmentIds } : {}),
               });
             }
             break;
@@ -609,7 +627,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Release lock
         dispatch({ type: 'RELEASE_LOCK', payload: lockKey });
         
-        console.log(` Processed ${operation.type} operation`);
+        console.log(` Processed ${operation.type} operation`);
       } catch (error) {
         // Release lock on error
         const lockKey = `${operation.type}-${JSON.stringify(operation.data)}`;
@@ -618,7 +636,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (isRetryableError(error) && operation.retryCount < RETRY_CONFIG.maxRetries) {
           // Schedule retry
           const delay = getRetryDelay(operation.retryCount);
-          console.log(`ð Scheduling retry for ${operation.type} in ${delay}ms (attempt ${operation.retryCount + 1}/${RETRY_CONFIG.maxRetries})`);
+          console.log(` Scheduling retry for ${operation.type} in ${delay}ms (attempt ${operation.retryCount + 1}/${RETRY_CONFIG.maxRetries})`);
           
           const timeoutId = setTimeout(() => {
             dispatch({
@@ -789,7 +807,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         
         dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
-        console.log('=ô Offline: Thread creation queued');
+        console.log('= Offline: Thread creation queued');
         return optimisticId;
       }
       
@@ -801,7 +819,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         dispatch({ type: 'REMOVE_OPTIMISTIC_THREAD', payload: optimisticId });
         dispatch({ type: 'SELECT_THREAD', payload: realThreadId });
         
-        console.log(' Thread created on Convex:', realThreadId);
+        console.log(' Thread created on Convex:', realThreadId);
         return realThreadId;
       } catch (error) {
         if (isRetryableError(error)) {
@@ -816,7 +834,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           };
           
           dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
-          console.log('  Network error: Thread creation queued for retry');
+          console.log(' Network error: Thread creation queued for retry');
           return optimisticId;
         } else {
           // Non-retryable error, rollback
@@ -857,7 +875,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           model: updates.model 
         });
         
-        console.log(' Thread updated on Convex');
+        console.log(' Thread updated on Convex');
       } catch (error) {
         if (isRetryableError(error)) {
           // Queue for retry
@@ -904,7 +922,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       try {
         await deleteThreadMutation({ threadId: threadId as Id<"threads"> });
-        console.log(' Thread deleted on Convex');
+        console.log(' Thread deleted on Convex');
       } catch (error) {
         if (isRetryableError(error)) {
           const operation: PendingOperation = {
@@ -926,7 +944,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     },
 
-    sendMessage: async (content: string, threadId: string, attachmentIds?: string[], onToken?: (token: string) => void, onDone?: () => void, messageAttachmentIds?: string[]) => {
+    sendMessage: async (content: string, threadId: string, provider?: string, model?: string, apiKey?: string | null, attachmentIds?: string[], agentId?: string) => {
       if (!localDB.current) throw new Error('Local cache not initialized');
       
       // Create optimistic message
@@ -961,7 +979,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           data: { 
             threadId: threadId as Id<"threads">, 
             content, 
-            attachmentIds: messageAttachmentIds,
+            provider,
+            model,
+            apiKey,
+            attachmentIds,
+            agentId,
             generateResponse: true 
           },
           timestamp: Date.now(),
@@ -970,40 +992,30 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         
         dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
-        console.log('=ô Offline: Message queued');
+        console.log('= Offline: Message queued');
         return;
       }
 
       try {
-        // Send to Convex
-        const messageId = await sendMessageMutation({ 
-          threadId: threadId as Id<"threads">, 
-          content,
-          attachmentIds: messageAttachmentIds,
-        });
-        
-        // Remove optimistic message (real one will come from Convex)
+        // Remove optimistic message first
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
         
-        // Generate AI response
+        // Get thread info for AI settings
         const thread = state.threads.find(t => t._id === threadId);
-        if (thread) {
-          const agentId = thread.agentId;
-          
-          await generateResponseAction({
-            threadId: threadId as Id<"threads">,
-            messageId: messageId as Id<"messages">,
-            provider: thread.provider,
-            model: thread.model,
-            systemPrompt: agentId ? getAgentSystemPrompt(agentId) : undefined,
-            temperature: agentId ? getAgentTemperature(agentId) : undefined,
-            messages: [],
-            onToken: onToken || (() => {}),
-          });
-        }
+        if (!thread) throw new Error('Thread not found');
         
-        onDone?.();
-        console.log(' Message sent and AI response generated');
+        // Send message and generate AI response in one action
+        await generateResponseAction({
+          threadId: threadId as Id<"threads">,
+          content,
+          provider: provider || thread.provider || 'openai',
+          model: model || thread.model || 'gpt-4o-mini',
+          apiKey: apiKey || undefined,
+          attachmentIds: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
+          systemPrompt: agentId ? getAgentSystemPrompt(agentId) : undefined,
+        });
+        
+        console.log(' Message sent and AI response generated');
       } catch (error) {
         if (isRetryableError(error)) {
           const operation: PendingOperation = {
@@ -1012,7 +1024,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             data: { 
               threadId: threadId as Id<"threads">, 
               content, 
-              attachmentIds: messageAttachmentIds,
+              provider,
+              model,
+              apiKey,
+              attachmentIds,
+              agentId,
               generateResponse: true 
             },
             timestamp: Date.now(),
@@ -1168,3 +1184,16 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 };
+
+// Convenience hooks
+export function useSyncStatus() {
+  const { state } = useEnhancedSync();
+  return {
+    isInitialized: state.isInitialized,
+    lastSyncTime: state.lastSyncTime,
+    pendingOperations: state.pendingOperations.length,
+    hasError: !!state.error,
+    error: state.error,
+    isSyncing: state.isSyncing,
+  };
+}

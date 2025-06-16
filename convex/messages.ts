@@ -35,6 +35,7 @@ export const create = mutation({
     content: v.string(),
     isStreaming: v.optional(v.boolean()),
     cursor: v.optional(v.boolean()),
+    attachmentIds: v.optional(v.array(v.id("attachments"))),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);

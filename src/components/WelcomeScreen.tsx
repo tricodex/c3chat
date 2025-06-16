@@ -7,13 +7,13 @@ export function WelcomeScreen() {
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Title */}
         <div className="text-center">
-          <h1 className="text-6xl font-bold mb-6 text-[var(--c3-text-primary)] tracking-wide" 
+          <h1 className="text-5xl font-normal mb-6 text-[var(--c3-text-primary)] tracking-wide" 
               style={{ 
-                fontFamily: 'var(--c3-font-display)', 
-                fontWeight: '700',
-                letterSpacing: '0.05em'
+                fontFamily: 'var(--c3-font-mono)', 
+                fontWeight: '400',
+                letterSpacing: '0.1em'
               }}>
-            C³ Chat
+            C3CHAT
           </h1>
           
           <p className="text-[var(--c3-text-secondary)] text-lg">

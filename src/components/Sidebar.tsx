@@ -94,16 +94,16 @@ export function Sidebar({
     <>
       <aside className={`c3-sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''} c3-scrollbar`}>
         {/* Sidebar Header */}
-        <div className="pl-6 pr-4 py-6 border-b border-[var(--c3-border-subtle)]">
+        <div className="pl-4 pr-4 py-6 border-b border-[var(--c3-border-subtle)]">
           <div className="flex items-center justify-between mb-4">
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-[var(--c3-text-primary)] tracking-wide" 
+              <h1 className="text-xl font-normal text-[var(--c3-text-primary)] tracking-wide" 
                   style={{ 
-                    fontFamily: 'var(--c3-font-display)', 
-                    fontWeight: '700',
-                    letterSpacing: '0.05em'
+                    fontFamily: 'var(--c3-font-mono)', 
+                    fontWeight: '400',
+                    letterSpacing: '0.1em'
                   }}>
-                C³ Chat
+                C3CHAT
               </h1>
               <p className="text-[11px] font-medium mt-1" style={{ color: 'var(--c3-text-tertiary)' }}>
                 {threads.length} conversation{threads.length !== 1 ? 's' : ''}

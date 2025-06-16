@@ -2,8 +2,8 @@
 @import "./styles/design-system.css";
 
 /* =======================
-   C3CHAT APPLICATION STYLES
-   Enterprise-grade AI Chat Interface
+   C3CHAT MINIMAL CHECKER THEME
+   Monospace-based minimal interface
    ======================= */
 
 /* Base Application Layout */
@@ -11,12 +11,13 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  font-family: var(--c3-font-mono) !important;
 }
 
 html {
-  font-family: var(--c3-font-sans);
+  font-family: var(--c3-font-mono);
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--c3-text-primary);
   background: var(--c3-bg-primary);
   scroll-behavior: smooth;
@@ -28,39 +29,35 @@ body {
   min-height: 100vh;
   overflow: hidden;
   position: relative;
+  font-family: var(--c3-font-mono) !important;
 }
 
-/* Liquid glass background effect - Multiple layers */
+/* Minimal checker background effect - Very subtle and opaque */
 body::before {
   content: '';
   position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle at 20% 80%, oklch(from var(--c3-primary) l c h / 0.08), transparent 50%),
-              radial-gradient(circle at 80% 20%, oklch(from var(--c3-electric) l c h / 0.06), transparent 50%),
-              radial-gradient(circle at 40% 40%, oklch(from var(--c3-secondary) l c h / 0.04), transparent 50%);
-  z-index: -1;
-  animation: c3-liquid-morph 20s ease-in-out infinite;
-  pointer-events: none;
-  filter: blur(60px);
-}
-
-body::after {
-  content: '';
-  position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  background: 
-    radial-gradient(circle at 90% 10%, oklch(from var(--c3-accent) l c h / 0.03), transparent 30%),
-    radial-gradient(circle at 10% 90%, oklch(from var(--c3-primary) l c h / 0.03), transparent 30%);
+  background-image: 
+    linear-gradient(45deg, rgba(255, 255, 255, 0.008) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.008) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.008) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.008) 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
   z-index: -1;
-  animation: c3-liquid-morph 30s ease-in-out infinite reverse;
   pointer-events: none;
-  filter: blur(40px);
+  opacity: 0.5;
+}
+
+[data-theme="light"] body::before {
+  background-image: 
+    linear-gradient(45deg, rgba(0, 0, 0, 0.008) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.008) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.008) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.008) 75%);
 }
 
 /* Application Root - Enhanced gradient mesh */
@@ -69,12 +66,7 @@ body::after {
   display: flex;
   flex-direction: column;
   position: relative;
-  background-image: 
-    radial-gradient(ellipse at top left, oklch(from var(--c3-primary) l c h / 0.04) 0%, transparent 40%),
-    radial-gradient(ellipse at bottom right, oklch(from var(--c3-electric) l c h / 0.04) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, oklch(from var(--c3-accent) l c h / 0.02) 0%, transparent 60%);
-  background-size: 100% 100%, 100% 100%, 150% 150%;
-  background-position: 0 0, 100% 100%, center;
+  background: var(--c3-bg-primary);
 }
 
 /* =======================
@@ -90,15 +82,15 @@ body::after {
   background: var(--c3-bg-primary);
 }
 
-/* Sidebar - Professional Enterprise Style */
+/* Sidebar - Minimal Clean Style */
 .c3-sidebar {
-  width: 300px;
+  width: 280px;
   background: var(--c3-bg-secondary);
   border-right: 1px solid var(--c3-border-subtle);
   display: flex;
   flex-direction: column;
-  transition: width var(--c3-duration-normal) var(--c3-ease-out), transform var(--c3-duration-normal) var(--c3-ease-out);
-  box-shadow: 4px 0 24px oklch(0 0 0 / 0.05);
+  transition: width var(--c3-duration-fast) var(--c3-ease-out), transform var(--c3-duration-fast) var(--c3-ease-out);
+  box-shadow: none;
   position: relative;
   overflow: hidden;
   transform: translateX(0);
@@ -117,21 +109,9 @@ body::after {
 }
 
 [data-theme="light"] .c3-sidebar {
-  border-right: none !important;
-  box-shadow: 2px 0 20px oklch(0 0 0 / 0.06);
-  background: oklch(0.99 0.004 85);
-}
-
-.c3-sidebar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, 
-    oklch(from var(--c3-primary) l c h / 0.03) 0%,
-    transparent 20%,
-    transparent 80%,
-    oklch(from var(--c3-electric) l c h / 0.03) 100%);
-  pointer-events: none;
+  border-right: none;
+  box-shadow: none;
+  background: var(--c3-bg-secondary);
 }
 
 @media (max-width: 768px) {
@@ -159,41 +139,26 @@ body::after {
   position: relative;
 }
 
-/* Header - Professional Enterprise Style with Glass */
+/* Header - Minimal Clean Style */
 .c3-header {
-  height: 64px;
-  background: oklch(from var(--c3-bg-secondary) l c h / 0.8);
+  height: 56px;
+  background: var(--c3-bg-secondary);
   border-bottom: 1px solid var(--c3-border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 var(--c3-space-xl);
-  gap: var(--c3-space-lg);
+  padding: 0 var(--c3-space-lg);
+  gap: var(--c3-space-md);
   font-size: var(--c3-font-size-sm);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
   position: relative;
   z-index: 10;
-  box-shadow: 0 2px 20px oklch(0 0 0 / 0.05);
+  box-shadow: none;
+  font-family: var(--c3-font-mono);
 }
 
 [data-theme="light"] .c3-header {
   border-bottom: none;
-  box-shadow: 0 2px 12px oklch(0 0 0 / 0.08);
-  background: oklch(from var(--c3-bg-secondary) l c h / 0.95);
-}
-
-.c3-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, 
-    transparent,
-    var(--c3-primary) 50%,
-    transparent);
-  opacity: 0.3;
+  box-shadow: none;
+  background: var(--c3-bg-secondary);
 }
 
 /* =======================
@@ -228,26 +193,28 @@ body::after {
   background: oklch(from var(--c3-bg-secondary) l c h / 0.98);
 }
 
-/* Messages Area - Professional with proper spacing */
+/* Messages Area - Minimal and compact */
 .c3-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--c3-space-2xl) var(--c3-space-xl);
+  padding: var(--c3-space-lg) var(--c3-space-md);
   display: flex;
   flex-direction: column;
-  gap: var(--c3-space-xl);
+  gap: var(--c3-space-md);
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+  font-family: var(--c3-font-mono);
 }
 
-/* Message Bubble - Enterprise Style with Enhanced Glass Effect */
+/* Message Bubble - Minimal and clean */
 .c3-message {
   display: flex;
-  gap: var(--c3-space-md);
-  max-width: 70%;
-  animation: c3-fade-in var(--c3-duration-normal) var(--c3-ease-out);
+  gap: var(--c3-space-sm);
+  max-width: 75%;
+  animation: c3-fade-in var(--c3-duration-fast) var(--c3-ease-out);
   position: relative;
+  font-family: var(--c3-font-mono);
 }
 
 .c3-message::before {
@@ -278,20 +245,21 @@ body::after {
   align-self: flex-start;
 }
 
-/* Message Avatar - Professional Style */
+/* Message Avatar - Minimal Style */
 .c3-message-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--c3-radius-md);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--c3-radius-sm);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: var(--c3-font-size-sm);
-  box-shadow: 0 2px 8px oklch(0 0 0 / 0.1);
+  font-weight: 400;
+  font-size: var(--c3-font-size-xs);
+  box-shadow: none;
   position: relative;
   overflow: hidden;
+  font-family: var(--c3-font-mono);
 }
 
 .c3-message-avatar::after {
@@ -335,6 +303,7 @@ body::after {
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
   cursor: text;
   user-select: text;
+  -webkit-user-select: text;
 }
 
 .c3-message-content:hover {
@@ -405,23 +374,22 @@ body::after {
   animation-delay: 0.4s;
 }
 
-/* Input Area - Professional Glass Style */
+/* Input Area - Minimal and compact */
 .c3-input-area {
   background: var(--c3-bg-secondary);
   border-top: 1px solid var(--c3-border-subtle);
-  padding: var(--c3-space-lg) var(--c3-space-xl);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  padding: var(--c3-space-md) var(--c3-space-lg);
   position: relative;
   z-index: 10;
   flex-shrink: 0;
   margin-top: auto;
+  font-family: var(--c3-font-mono);
 }
 
 [data-theme="light"] .c3-input-area {
   border-top: none;
-  box-shadow: 0 -2px 12px oklch(0 0 0 / 0.08);
-  background: oklch(from var(--c3-bg-secondary) l c h / 0.98);
+  box-shadow: none;
+  background: var(--c3-bg-secondary);
 }
 
 .c3-input-area::before {
@@ -509,19 +477,22 @@ body::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--c3-space-sm);
-  padding: 0 var(--c3-space-lg);
-  border: none;
-  border-radius: var(--c3-radius-md);
-  font-weight: 500;
+  gap: var(--c3-space-xs);
+  padding: 0 var(--c3-space-md);
+  border: 1px solid var(--c3-border-subtle);
+  border-radius: var(--c3-radius-sm);
+  font-weight: 400;
   font-size: var(--c3-font-size-sm);
   line-height: 1;
   cursor: pointer;
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
   position: relative;
   overflow: hidden;
-  height: 40px;
+  height: 36px;
   white-space: nowrap;
+  font-family: var(--c3-font-mono);
+  background: var(--c3-surface-primary);
+  color: var(--c3-text-primary);
 }
 
 .c3-button::before {
@@ -543,31 +514,33 @@ body::after {
 }
 
 .c3-button-primary {
-  background: var(--c3-gradient-primary);
-  color: white;
-  box-shadow: 0 2px 8px oklch(from var(--c3-primary) l c h / 0.2);
+  background: var(--c3-primary);
+  color: var(--c3-msg-user-text);
+  border-color: var(--c3-primary);
+  box-shadow: none;
 }
 
 .c3-button-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px oklch(from var(--c3-primary) l c h / 0.3);
+  background: var(--c3-primary-hover);
+  transform: none;
+  box-shadow: none;
 }
 
 .c3-button-secondary {
   background: var(--c3-surface-primary);
   color: var(--c3-text-primary);
-  border: 1px solid var(--c3-border-primary);
+  border-color: var(--c3-border-subtle);
 }
 
 [data-theme="light"] .c3-button-secondary {
   border: none;
-  box-shadow: 0 2px 8px oklch(0 0 0 / 0.04);
+  box-shadow: none;
 }
 
 .c3-button-secondary:hover:not(:disabled) {
   background: var(--c3-surface-hover);
-  border-color: var(--c3-primary);
-  transform: translateY(-1px);
+  border-color: var(--c3-border-primary);
+  transform: none;
 }
 
 .c3-button-ghost {
@@ -600,13 +573,14 @@ body::after {
 }
 
 /* =======================
-   THREAD LIST - Professional Style
+   THREAD LIST - Minimal Style
    ======================= */
 
 .c3-thread-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--c3-space-sm) var(--c3-space-xs);
+  padding: var(--c3-space-xs) var(--c3-space-xs);
+  font-family: var(--c3-font-mono);
 }
 
 /* Original thread item style - keeping for compatibility */
@@ -631,15 +605,16 @@ body::after {
   display: flex;
   align-items: center;
   gap: var(--c3-space-xs);
-  padding: 12px 16px;
+  padding: 8px 12px;
   margin: 0 8px 2px 8px;
-  border-radius: var(--c3-radius-md);
+  border-radius: var(--c3-radius-sm);
   cursor: pointer;
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
   position: relative;
   overflow: hidden;
   background: transparent;
   border: 1px solid transparent;
+  font-family: var(--c3-font-mono);
 }
 
 .c3-thread-item::before {
@@ -819,6 +794,62 @@ body::after {
   filter: drop-shadow(0 1px 2px oklch(from var(--c3-primary) l c h / 0.2));
 }
 
+/* =======================
+   ENHANCED CHAT CONTROLS
+   ======================= */
+
+/* Feature toggle buttons */
+.c3-feature-toggle {
+  position: relative;
+  overflow: hidden;
+  transition: all var(--c3-duration-fast) var(--c3-ease-out);
+  font-family: var(--c3-font-mono);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.c3-feature-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.15);
+}
+
+.c3-feature-toggle.active {
+  position: relative;
+}
+
+.c3-feature-toggle.active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, 
+    oklch(from var(--c3-primary) l c h / 0.1),
+    transparent 40%);
+  border-radius: inherit;
+  z-index: -1;
+}
+
+/* Status indicator dot */
+.c3-status-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--c3-primary);
+  border-radius: var(--c3-radius-full);
+  animation: c3-pulse 2s infinite;
+  box-shadow: 0 0 4px oklch(from var(--c3-primary) l c h / 0.4);
+}
+
+/* Enhanced tooltips for control buttons */
+.c3-control-button {
+  position: relative;
+  border-radius: var(--c3-radius-md);
+  transition: all var(--c3-duration-fast) var(--c3-ease-out);
+}
+
+.c3-control-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.1);
+}
+
 .c3-divider {
   height: 1px;
   background: var(--c3-border-subtle);
@@ -836,6 +867,7 @@ body::after {
   color: var(--c3-primary);
   border: 1px solid oklch(from var(--c3-primary) l c h / 0.2);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .c3-spinner {
@@ -930,6 +962,7 @@ body::after {
   border-radius: var(--c3-radius-full);
   margin-bottom: var(--c3-space-lg);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
 }
 
@@ -950,6 +983,7 @@ body::after {
   cursor: pointer;
   transition: all var(--c3-duration-fast) var(--c3-ease-out);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
 }
@@ -992,6 +1026,7 @@ body::after {
   border-radius: var(--c3-radius-lg);
   transition: all var(--c3-duration-normal) var(--c3-ease-out);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
 }
@@ -1032,6 +1067,7 @@ body::after {
   border: 1px solid var(--c3-border-subtle);
   border-radius: var(--c3-radius-md);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 [data-theme="light"] .c3-attachment-preview {

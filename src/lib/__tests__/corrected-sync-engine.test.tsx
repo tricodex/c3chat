@@ -4,7 +4,7 @@ import React from 'react'
 // Basic test to verify the sync engine types and exports exist
 describe('Enhanced Sync Engine', () => {
   it('should be testable', () => {
-    expect(true).toBe(true)
+    expect(true).toBe(true) 
   })
 
   it('should have valid React types', () => {
