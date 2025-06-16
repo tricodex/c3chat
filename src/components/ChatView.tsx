@@ -19,6 +19,21 @@ export function ChatView() {
   const selectedThread = useSelectedThread();
   const messages = useMessages(selectedThread?._id);
   
+  // Debug logging
+  useEffect(() => {
+    console.log('🎯 ChatView state:', {
+      threadId: selectedThread?._id,
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        id: m._id,
+        role: m.role,
+        content: m.content?.substring(0, 30) + '...',
+        isStreaming: m.isStreaming,
+        isOptimistic: m.isOptimistic
+      }))
+    });
+  }, [messages, selectedThread]);
+  
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);

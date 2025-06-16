@@ -186,8 +186,10 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
     case 'SET_MESSAGES_FROM_CONVEX':
       
       // Only update messages if the thread matches the currently selected thread
-      if (action.payload.threadId !== state.selectedThreadId) {
-        console.warn('[SYNC] Ignoring messages for non-selected thread:', action.payload.threadId, 'current:', state.selectedThreadId);
+      if (!action.payload.threadId || action.payload.threadId !== state.selectedThreadId) {
+        if (action.payload.threadId) {
+          console.warn('[SYNC] Ignoring messages for non-selected thread:', action.payload.threadId, 'current:', state.selectedThreadId);
+        }
         return state;
       }
       
@@ -212,9 +214,9 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       });
       
       // Add in-flight optimistic messages that don't have matching content in Convex
-      const convexContents = new Set(convexMessages.map(m => m.content.trim()));
+      const convexContents = new Set(convexMessages.map(m => m.content?.trim() || ''));
       inFlightOptimisticMessages.forEach(msg => {
-        if (!convexContents.has(msg.content.trim())) {
+        if (!convexContents.has(msg.content?.trim() || '')) {
           messageMap.set(msg._id, msg);
         }
       });
@@ -550,10 +552,23 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     ? state.selectedThreadId as Id<"threads"> 
     : null;
     
-  const convexMessages = useQuery(
+  const convexMessagesRaw = useQuery(
     api.messages.list,
     selectedThreadIdForQuery ? { threadId: selectedThreadIdForQuery } : "skip"
-  ) || [];
+  );
+  
+  const convexMessages = convexMessagesRaw || [];
+  
+  // Debug log for messages query
+  useEffect(() => {
+    console.log('🔍 Convex messages query:', {
+      selectedThreadId: state.selectedThreadId,
+      queryThreadId: selectedThreadIdForQuery,
+      rawResult: convexMessagesRaw,
+      messageCount: convexMessages.length,
+      firstMessage: convexMessages[0]
+    });
+  }, [convexMessagesRaw, selectedThreadIdForQuery]);
 
   // Convex mutations
   const createThreadMutation = useMutation(api.threads.create);
@@ -815,9 +830,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Memoize messages to prevent unnecessary updates
   const memoizedConvexMessages = useMemo(() => {
-    // Only return a new reference if the actual content has changed
-    const messageIds = convexMessages.map(m => m._id).sort().join(',');
-    return { messages: convexMessages, ids: messageIds };
+    // Create a hash that includes both IDs and content to detect any changes
+    const messageHash = convexMessages.map(m => 
+      `${m._id}:${m.content?.length || 0}:${m.isStreaming}:${m.cursor}`
+    ).sort().join('|');
+    return { messages: convexMessages, hash: messageHash };
   }, [convexMessages]);
 
   // Track current thread to prevent stale updates
@@ -836,15 +853,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // This handles race conditions when switching threads
     const queryThreadId = state.selectedThreadId.startsWith('temp_') ? null : state.selectedThreadId;
     
-    // If the query is skipped or returns no messages, clear the local state
-    if (!queryThreadId || !memoizedConvexMessages.messages.length) {
-      // Only update if we're still on the same thread
-      if (currentThreadRef.current === effectThreadId) {
-        dispatch({ 
-          type: 'SET_MESSAGES_FROM_CONVEX', 
-          payload: { threadId: effectThreadId, messages: [] }
-        });
-      }
+    // If the query is skipped, don't update
+    if (!queryThreadId) {
       return;
     }
     
@@ -860,6 +870,18 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     // Only update if we're still on the same thread
     if (currentThreadRef.current === effectThreadId) {
+      console.log('📨 Syncing messages from Convex:', {
+        threadId: effectThreadId,
+        messageCount: messagesForCurrentThread.length,
+        messages: messagesForCurrentThread.map(m => ({
+          id: m._id,
+          role: m.role,
+          content: m.content ? m.content.substring(0, 50) + '...' : '[empty]',
+          isStreaming: m.isStreaming,
+          cursor: m.cursor
+        }))
+      });
+      
       dispatch({ 
         type: 'SET_MESSAGES_FROM_CONVEX', 
         payload: { threadId: effectThreadId, messages: messagesForCurrentThread }
@@ -881,18 +903,13 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       syncMessagesToLocal();
     }
-  }, [memoizedConvexMessages.ids, state.selectedThreadId, state.isInitialized]); // Use memoized IDs to prevent loops
+  }, [memoizedConvexMessages.hash, state.selectedThreadId, state.isInitialized]); // Use memoized hash to detect content changes
 
-  // Save selected thread to metadata and clear messages when thread changes
+  // Save selected thread to metadata when thread changes
   useEffect(() => {
     if (!localDB.current || !state.isInitialized) return;
     
     localDB.current.setMetadata({ selectedThreadId: state.selectedThreadId || undefined });
-    
-    // Clear all messages when no thread is selected
-    if (!state.selectedThreadId) {
-      dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: { threadId: '', messages: [] } });
-    }
   }, [state.selectedThreadId, state.isInitialized]);
   
   // Clean up old optimistic messages periodically
