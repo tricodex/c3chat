@@ -5,7 +5,7 @@
       "name": "c3chat",
       "dependencies": {
         "@convex-dev/auth": "^0.0.80",
-        "@google/genai": "^1.5.1",
+        "@google/genai": "1.5.1",
         "@lobehub/icons": "^2.4.0",
         "@tailwindcss/postcss": "^4.1.8",
         "@tanstack/react-virtual": "^3.13.10",

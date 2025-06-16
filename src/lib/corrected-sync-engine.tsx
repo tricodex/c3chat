@@ -183,6 +183,11 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       };
 
     case 'SET_MESSAGES_FROM_CONVEX':
+      // Only update messages if the thread matches the currently selected thread
+      if (action.payload.threadId !== state.selectedThreadId) {
+        return state;
+      }
+      
       // Merge Convex messages with optimistic messages
       const convexMessages = action.payload.messages;
       const existingMessages = state.messages[action.payload.threadId] || [];
@@ -420,7 +425,13 @@ export const useThreads = () => {
 export const useMessages = (threadId?: string) => {
   const { state } = useEnhancedSync();
   const id = threadId || state.selectedThreadId;
-  return state.messages[id || ''] || [];
+  
+  // Only return messages if the threadId matches the current selection
+  if (id && id === state.selectedThreadId) {
+    return state.messages[id] || [];
+  }
+  
+  return [];
 };
 
 export const useSelectedThread = () => {
@@ -475,6 +486,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const retryTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const processingQueue = useRef(false);
   const mountedRef = useRef(true);
+  const currentThreadRef = useRef<string | null>(null);
 
   // Convex queries
   const convexThreads = useQuery(api.threads.list) || [];
@@ -742,43 +754,79 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return convexMessages.map(m => m._id).join(',');
   }, [convexMessages]);
 
+  // Track current thread to prevent stale updates
+  useEffect(() => {
+    currentThreadRef.current = state.selectedThreadId;
+  }, [state.selectedThreadId]);
+  
   // Sync messages to local state
   useEffect(() => {
     if (!state.selectedThreadId || !state.isInitialized) return;
-    if (!convexMessages.length && !state.messages[state.selectedThreadId]?.length) return;
     
-    // Only sync messages if they belong to the currently selected thread
-    // This prevents race conditions when switching threads quickly
-    const messagesForCurrentThread = convexMessages.filter(msg => 
-      msg.threadId === state.selectedThreadId
-    );
+    // Store the thread ID at the time of this effect
+    const effectThreadId = state.selectedThreadId;
     
-    dispatch({ 
-      type: 'SET_MESSAGES_FROM_CONVEX', 
-      payload: { threadId: state.selectedThreadId, messages: messagesForCurrentThread }
-    });
+    // IMPORTANT: Verify the Convex query is for the current thread
+    // This handles race conditions when switching threads
+    const queryThreadId = state.selectedThreadId.startsWith('temp_') ? null : state.selectedThreadId;
     
-    // Cache to local DB
-    const syncMessagesToLocal = async () => {
-      if (!localDB.current) return;
-      
-      for (const message of convexMessages) {
-        await localDB.current.saveMessage({
-          ...message,
-          localCreatedAt: message._creationTime,
-          syncedToServer: true,
+    // If the query is skipped or returns no messages, clear the local state
+    if (!queryThreadId || !convexMessages.length) {
+      // Only update if we're still on the same thread
+      if (currentThreadRef.current === effectThreadId) {
+        dispatch({ 
+          type: 'SET_MESSAGES_FROM_CONVEX', 
+          payload: { threadId: effectThreadId, messages: [] }
         });
       }
-    };
+      return;
+    }
     
-    syncMessagesToLocal();
+    // Double-check that ALL messages belong to the currently selected thread
+    // This is crucial to prevent cross-thread contamination
+    const messagesForCurrentThread = convexMessages.filter(msg => {
+      const belongsToThread = msg.threadId === effectThreadId;
+      if (!belongsToThread) {
+        console.warn(`Message ${msg._id} belongs to thread ${msg.threadId} but current thread is ${effectThreadId}`);
+      }
+      return belongsToThread;
+    });
+    
+    // Only update if we're still on the same thread
+    if (currentThreadRef.current === effectThreadId) {
+      dispatch({ 
+        type: 'SET_MESSAGES_FROM_CONVEX', 
+        payload: { threadId: effectThreadId, messages: messagesForCurrentThread }
+      });
+      
+      // Cache to local DB
+      const syncMessagesToLocal = async () => {
+        if (!localDB.current || currentThreadRef.current !== effectThreadId) return;
+        
+        // Only cache messages that belong to the current thread
+        for (const message of messagesForCurrentThread) {
+          await localDB.current.saveMessage({
+            ...message,
+            localCreatedAt: message._creationTime,
+            syncedToServer: true,
+          });
+        }
+      };
+      
+      syncMessagesToLocal();
+    }
   }, [convexMessageIds, state.selectedThreadId, state.isInitialized, convexMessages]); // Include convexMessages for data sync
 
-  // Save selected thread to metadata
+  // Save selected thread to metadata and clear messages when thread changes
   useEffect(() => {
     if (!localDB.current || !state.isInitialized) return;
     
     localDB.current.setMetadata({ selectedThreadId: state.selectedThreadId || undefined });
+    
+    // Clear all messages when no thread is selected
+    if (!state.selectedThreadId) {
+      dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: { threadId: '', messages: [] } });
+    }
   }, [state.selectedThreadId, state.isInitialized]);
 
   // Advanced actions from AI module
@@ -793,19 +841,43 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Actions with offline support
   const actions = useMemo(() => ({
     selectThread: async (threadId: string | null) => {
-      // Clear messages from previous thread to prevent cross-contamination
-      if (state.selectedThreadId && state.selectedThreadId !== threadId) {
+      // Clear ALL messages from ALL threads to ensure clean state
+      // This is more aggressive but prevents any cross-contamination
+      if (state.selectedThreadId) {
         dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId });
       }
       
+      // Also clear messages for the new thread to ensure fresh state
+      if (threadId) {
+        dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: threadId });
+      }
+      
+      // Update selected thread
       dispatch({ type: 'SELECT_THREAD', payload: threadId });
       
       if (threadId && localDB.current) {
-        // Load cached messages instantly
-        const cachedMessages = await localDB.current.getMessages(threadId);
+        // Set empty messages immediately to show loading state
         dispatch({ 
           type: 'SET_MESSAGES_FROM_CONVEX', 
-          payload: { threadId, messages: cachedMessages }
+          payload: { threadId, messages: [] }
+        });
+        
+        // Load cached messages after a small delay to ensure state is clean
+        setTimeout(async () => {
+          const cachedMessages = await localDB.current!.getMessages(threadId);
+          // Double-check we're still on the same thread using ref
+          if (currentThreadRef.current === threadId && cachedMessages.length > 0) {
+            dispatch({ 
+              type: 'SET_MESSAGES_FROM_CONVEX', 
+              payload: { threadId, messages: cachedMessages }
+            });
+          }
+        }, 10);
+      } else if (threadId) {
+        // Clear messages for new thread while waiting for Convex query
+        dispatch({ 
+          type: 'SET_MESSAGES_FROM_CONVEX', 
+          payload: { threadId, messages: [] }
         });
       }
     },
@@ -1045,7 +1117,6 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const thread = state.threads.find(t => t._id === threadId);
         if (!thread) throw new Error('Thread not found');
         
-        // Send message and generate AI response in one action
         console.log('🚀 Sending message with params:', {
           threadId,
           provider: provider || thread.provider || 'openai',
@@ -1055,18 +1126,26 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           agentId
         });
         
+        // Create the user message on the server
+        const userMessageId = await sendMessageMutation({
+          threadId: threadId as Id<"threads">,
+          role: 'user' as const,
+          content,
+          attachmentIds: attachmentIds && attachmentIds.length > 0 ? attachmentIds as Id<"attachments">[] : undefined,
+        });
+        
+        // Remove optimistic message now that real message is created
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
+        
+        // Generate AI response
         await generateResponseAction({
           threadId: threadId as Id<"threads">,
-          content,
+          userMessageId,
           provider: provider || thread.provider || 'openai',
           model: model || thread.model || 'gpt-4o-mini',
           apiKey: apiKey || undefined,
-          attachmentIds: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
           systemPrompt: agentId ? getAgentSystemPrompt(agentId) : undefined,
         });
-        
-        // Only remove optimistic message after successful send
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
         
         console.log('✅ Message sent and AI response generated');
       } catch (error) {
