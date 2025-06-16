@@ -10,7 +10,6 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Header } from "./components/Header";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CommandPalette } from "./components/CommandPalette";
-import { OfflineTest } from "./components/OfflineTest";
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -108,9 +107,6 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
     <div className="c3-layout">
       {/* Command Palette - accessible from anywhere */}
       <CommandPalette theme={theme} setTheme={setTheme} />
-      
-      {/* Offline Test Component - for testing */}
-      {process.env.NODE_ENV === 'development' && <OfflineTest />}
       
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (

@@ -343,7 +343,7 @@ function ElaborateDropdown({
   const currentProvider = selectedProvider ? AI_PROVIDERS[selectedProvider] : null;
   
   return (
-    <div className="absolute top-full mt-2 right-0 w-[480px] max-h-[600px] bg-[var(--c3-bg-elevated)] border border-[var(--c3-border-primary)] rounded-xl shadow-2xl overflow-hidden z-50 c3-glass-heavy">
+    <div className="absolute top-full mt-2 right-0 w-[480px] max-h-[600px] bg-[var(--c3-bg-elevated)] border border-[var(--c3-border-primary)] rounded-xl shadow-2xl overflow-hidden c3-glass-heavy c3-elaborate-dropdown">
       {/* Search Header */}
       <div className="p-4 border-b border-[var(--c3-border-subtle)] bg-[var(--c3-bg-secondary)]">
         <div className="relative">

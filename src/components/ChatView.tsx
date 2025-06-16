@@ -5,29 +5,29 @@ import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { EmptyState } from "./EmptyState";
 import { FileUpload } from "./FileUpload";
-import { ModelSelector } from "./ModelSelector";
 import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp } from "lucide-react";
 import { getStoredApiKey } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
 export function ChatView() {
-  const { state, actions } = useEnhancedSync();
+  const { actions, state } = useEnhancedSync();
   const selectedThread = useSelectedThread();
-  const messages = useMessages();
+  const messages = useMessages(selectedThread?._id);
   
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [attachments, setAttachments] = useState<Id<"attachments">[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
-  const [isDeepResearchMode, setIsDeepResearchMode] = useState(false);
-  const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState("assistant");
+  const [selectedProvider, setSelectedProvider] = useState("openai");
+  const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [enableWebSearch, setEnableWebSearch] = useState(false);
+  const [isDeepResearchMode, setIsDeepResearchMode] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -39,67 +39,97 @@ export function ChatView() {
   }, [messages]);
 
   const handleSubmit = async (content: string) => {
-    if (!content.trim() || isSending || !selectedThread || !selectedProvider || !selectedModel) {
-      if (!selectedProvider || !selectedModel) {
-        toast.error("Please select an AI model first");
-        return;
-      }
+    if (!selectedThread || !content.trim()) return;
+
+    const apiKey = getStoredApiKey(selectedProvider);
+    if (!apiKey) {
+      toast.error(`Please configure your ${selectedProvider} API key in Settings`);
       return;
     }
 
-    setInput("");
     setIsSending(true);
+    setInput("");
 
     try {
-      // Get API key for selected provider
-      const apiKey = getStoredApiKey(selectedProvider);
-      
-      // Check for special commands
+      // Handle commands
       if (content.startsWith("/")) {
         const [command, ...args] = content.slice(1).split(" ");
-        const query = args.join(" ").trim();
         
         switch (command.toLowerCase()) {
           case "image":
-            if (!query) {
+          case "img":
+            if (args.length === 0) {
               toast.error("Please provide a prompt for image generation");
               setInput(content);
               return;
             }
-            await actions.generateImage(query, selectedThread._id, selectedProvider, apiKey);
+            const imagePrompt = args.join(" ");
+            await actions.generateImage(imagePrompt, selectedThread._id);
             break;
             
           case "search":
-            if (!query) {
+            if (args.length === 0) {
               toast.error("Please provide a search query");
               setInput(content);
               return;
             }
-            await actions.sendMessageWithSearch(content, selectedThread._id, selectedProvider, selectedModel, apiKey, [query]);
+            const searchQuery = args.join(" ");
+            await actions.sendMessageWithSearch(
+              searchQuery, 
+              selectedThread._id, 
+              selectedProvider, 
+              selectedModel, 
+              apiKey,
+              [searchQuery],
+              attachments,
+              selectedAgentId
+            );
             break;
             
           case "research":
-            if (!query) {
+            if (args.length === 0) {
               toast.error("Please provide a research topic");
               setInput(content);
               return;
             }
-            // Enable deep research mode for this query
-            setIsDeepResearchMode(true);
-            await actions.sendMessageWithSearch(content, selectedThread._id, selectedProvider, selectedModel, apiKey, 
-              [query, `${query} latest research`, `${query} best practices`, `${query} case studies`]);
-            setIsDeepResearchMode(false);
+            const researchTopic = args.join(" ");
+            const researchQueries = [
+              researchTopic,
+              `${researchTopic} overview`,
+              `${researchTopic} examples`,
+              `${researchTopic} best practices`,
+              `${researchTopic} latest developments`
+            ];
+            await actions.sendMessageWithSearch(
+              researchTopic, 
+              selectedThread._id, 
+              selectedProvider, 
+              selectedModel, 
+              apiKey,
+              researchQueries,
+              attachments,
+              selectedAgentId
+            );
             break;
             
           case "branch":
-            // Create a branch from current conversation
-            await actions.createBranch(selectedThread._id);
-            toast.success("Created new conversation branch");
+            if (actions.createBranch) {
+              await actions.createBranch(selectedThread._id);
+              toast.success("Conversation branch created");
+            }
             break;
             
           case "export":
-            // Export conversation
-            await actions.exportThread(selectedThread._id, args[0] || "markdown");
+            const format = args[0] || "markdown";
+            if (actions.exportThread) {
+              await actions.exportThread(selectedThread._id, format);
+              toast.success(`Conversation exported as ${format}`);
+            }
+            break;
+            
+          case "clear":
+            await actions.clearThread(selectedThread._id);
+            toast.success("Conversation cleared");
             break;
             
           case "help":
@@ -176,17 +206,6 @@ export function ChatView() {
               onSelect={setSelectedAgentId}
             />
             
-            {/* Model Selector */}
-            <ModelSelector
-              currentProvider={selectedProvider}
-              currentModel={selectedModel}
-              onSelect={(provider, model) => {
-                setSelectedProvider(provider);
-                setSelectedModel(model);
-              }}
-              compact
-            />
-            
             {/* Feature Toggles */}
             <div className="flex items-center gap-2">
               <Tooltip 
@@ -231,37 +250,40 @@ export function ChatView() {
             </div>
           </div>
           
-          {/* Thread Actions */}
-          <div className="flex items-center gap-2">
-            <Tooltip content="Create a conversation branch from this point" position="bottom">
-              <button
-                onClick={() => actions.createBranch && actions.createBranch(selectedThread._id)}
-                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-                aria-label="Create conversation branch"
-              >
-                <GitBranch className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-              </button>
-            </Tooltip>
+          {/* Thread Actions and Analytics */}
+          <div className="flex items-center gap-3">
+            {/* Token Analytics Display */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--c3-surface-primary)] rounded-lg border border-[var(--c3-border-subtle)]">
+              <TrendingUp className="w-4 h-4 text-[var(--c3-primary)]" />
+              <span className="text-sm font-mono text-[var(--c3-text-secondary)]">
+                Tokens: 1.2K
+              </span>
+            </div>
             
-            <Tooltip content="Export conversation as Markdown" position="bottom">
-              <button
-                onClick={() => actions.exportThread && actions.exportThread(selectedThread._id, "markdown")}
-                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-                aria-label="Export conversation"
-              >
-                <Download className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-              </button>
-            </Tooltip>
-            
-            <Tooltip content="View token usage analytics (coming soon)" position="bottom">
-              <button
-                onClick={() => toast.info("Analytics coming soon!")}
-                className="p-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors"
-                aria-label="View token usage"
-              >
-                <ChartBar className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
-              </button>
-            </Tooltip>
+            {/* Action Buttons with Text */}
+            <div className="flex items-center gap-2">
+              <Tooltip content="Create a conversation branch from this point" position="bottom">
+                <button
+                  onClick={() => actions.createBranch && actions.createBranch(selectedThread._id)}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors flex items-center gap-2 text-sm font-mono border border-[var(--c3-border-subtle)]"
+                  aria-label="Create conversation branch"
+                >
+                  <GitBranch className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+                  <span className="text-[var(--c3-text-secondary)]">Branch</span>
+                </button>
+              </Tooltip>
+              
+              <Tooltip content="Export conversation as Markdown" position="bottom">
+                <button
+                  onClick={() => actions.exportThread && actions.exportThread(selectedThread._id, "markdown")}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--c3-surface-primary)] hover:bg-[var(--c3-surface-hover)] transition-colors flex items-center gap-2 text-sm font-mono border border-[var(--c3-border-subtle)]"
+                  aria-label="Export conversation"
+                >
+                  <Download className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+                  <span className="text-[var(--c3-text-secondary)]">Export</span>
+                </button>
+              </Tooltip>
+            </div>
           </div>
         </div>
         
