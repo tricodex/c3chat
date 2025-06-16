@@ -1,25 +1,23 @@
-"use node";
-
 import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { StreamBuffer, TokenCounter, retryWithBackoff, isRetryableError } from "./utils/streamBuffer";
+import { StreamBuffer, sanitizeContent, retryWithBackoff } from "./ai-utils";
 
-// Provider clients initialization
+// Helper to create OpenAI-compatible client for OpenRouter
 const createOpenAIClient = (apiKey: string, baseURL?: string) => {
   return new OpenAI({
     apiKey,
-    baseURL: baseURL || "https://api.openai.com/v1",
+    baseURL,
+    defaultHeaders: baseURL?.includes("openrouter") ? {
+      "HTTP-Referer": "https://c3chat.app",
+      "X-Title": "C3Chat",
+    } : undefined,
   });
 };
 
-const createGoogleClient = (apiKey: string) => {
-  return new GoogleGenAI({ apiKey });
-};
-
-// For all non-OpenAI/Google models, use OpenRouter
+// Create OpenRouter client (OpenAI-compatible)
 const createOpenRouterClient = (apiKey: string) => {
   return new OpenAI({
     apiKey,
@@ -30,6 +28,221 @@ const createOpenRouterClient = (apiKey: string) => {
     },
   });
 };
+
+// Generate AI response without creating user message (for optimistic UI flow)
+export const generateResponse: any = action({
+  args: {
+    threadId: v.id("threads"),
+    userMessageId: v.id("messages"),
+    provider: v.string(),
+    model: v.string(),
+    apiKey: v.optional(v.string()),
+    systemPrompt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Create assistant message with cursor
+    const assistantMessageId: any = await ctx.runMutation(api.messages.create, {
+      threadId: args.threadId,
+      role: "assistant",
+      content: "",
+      isStreaming: true,
+      cursor: true,
+    });
+
+    try {
+      // Get conversation history
+      const messages = await ctx.runQuery(api.messages.list, {
+        threadId: args.threadId,
+      });
+
+      // Convert to provider format (exclude the streaming message we just created)
+      const conversationHistory = messages
+        .filter((msg: any) => msg._id !== assistantMessageId)
+        .map((msg: any) => ({
+          role: msg.role as "user" | "assistant" | "system",
+          content: msg.content,
+        }));
+
+      // Add system prompt if provided
+      if (args.systemPrompt) {
+        conversationHistory.unshift({
+          role: "system",
+          content: args.systemPrompt,
+        });
+      }
+
+      // Stream response based on provider
+      let fullContent = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      switch (args.provider) {
+        case "openai":
+        case "openrouter": {
+          const apiKey = args.apiKey || process.env.CONVEX_OPENAI_API_KEY;
+          if (!apiKey) throw new Error("OpenAI API key required");
+
+          const baseURL = args.provider === "openrouter" 
+            ? "https://openrouter.ai/api/v1" 
+            : process.env.CONVEX_OPENAI_BASE_URL;
+
+          const client = createOpenAIClient(apiKey, baseURL);
+          
+          const streamBuffer = new StreamBuffer();
+          
+          const stream = await retryWithBackoff(async () => {
+            return await client.chat.completions.create({
+              model: args.model,
+              messages: conversationHistory,
+              stream: true,
+              ...(args.provider === "openrouter" && {
+                headers: {
+                  "HTTP-Referer": "https://c3chat.app",
+                  "X-Title": "C3Chat",
+                },
+              }),
+            });
+          });
+
+          for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content || "";
+            if (delta) {
+              streamBuffer.add(delta);
+              
+              // Buffer updates for smoother UI
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                // Update message content in real-time
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
+            }
+
+            // Extract usage if available
+            if (chunk.usage) {
+              inputTokens = chunk.usage.prompt_tokens || 0;
+              outputTokens = chunk.usage.completion_tokens || 0;
+            }
+          }
+
+          // Flush any remaining content
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
+          }
+          break;
+        }
+
+        case "google": {
+          const apiKey = args.apiKey || process.env.CONVEX_GOOGLE_API_KEY;
+          if (!apiKey) throw new Error("Google API key required");
+
+          const genAI = new GoogleGenAI({ apiKey });
+          const googleModel = genAI.getGenerativeModel({ 
+            model: args.model,
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 8192,
+            },
+          });
+
+          // Convert to Google format
+          const googleHistory = conversationHistory
+            .filter(msg => msg.role !== "system")
+            .map(msg => ({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.content }],
+            }));
+
+          // Add system prompt to the first user message if exists
+          if (args.systemPrompt && googleHistory.length > 0) {
+            const firstUserMsg = googleHistory.find(msg => msg.role === "user");
+            if (firstUserMsg) {
+              firstUserMsg.parts[0].text = `${args.systemPrompt}\n\n${firstUserMsg.parts[0].text}`;
+            }
+          }
+
+          const chat = googleModel.startChat({
+            history: googleHistory.slice(0, -1), // All except the last user message
+          });
+
+          const lastMessage = googleHistory[googleHistory.length - 1];
+          const result = await chat.sendMessageStream(lastMessage.parts[0].text);
+
+          const streamBuffer = new StreamBuffer();
+          
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              streamBuffer.add(text);
+              
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
+            }
+          }
+
+          // Flush remaining
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
+          }
+
+          // Get token counts
+          const response = await result.response;
+          if (response.usageMetadata) {
+            inputTokens = response.usageMetadata.promptTokenCount || 0;
+            outputTokens = response.usageMetadata.candidatesTokenCount || 0;
+          }
+          break;
+        }
+
+        default:
+          throw new Error(`Unsupported provider: ${args.provider}`);
+      }
+
+      // Finalize the message
+      await ctx.runMutation(internal.messages.updateContent, {
+        messageId: assistantMessageId,
+        content: sanitizeContent(fullContent),
+        isStreaming: false,
+        cursor: false,
+        inputTokens,
+        outputTokens,
+      });
+
+      return { success: true, messageId: assistantMessageId };
+    } catch (error: any) {
+      console.error("AI Generation Error:", error);
+      
+      // Update message with error
+      await ctx.runMutation(internal.messages.updateContent, {
+        messageId: assistantMessageId,
+        content: `I encountered an error while generating a response: ${error.message}. Please try again or check your API settings.`,
+        isStreaming: false,
+        cursor: false,
+      });
+
+      throw error;
+    }
+  },
+});
 
 // Main action for sending messages with multi-model support
 export const sendMessage: any = action({
@@ -150,10 +363,11 @@ export const sendMessage: any = action({
               outputTokens = chunk.usage.completion_tokens || 0;
             }
           }
-          
+
           // Flush any remaining content
-          if (streamBuffer.hasContent()) {
-            fullContent += streamBuffer.forceFlush();
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
           }
           break;
         }
@@ -162,85 +376,72 @@ export const sendMessage: any = action({
           const apiKey = args.apiKey || process.env.CONVEX_GOOGLE_API_KEY;
           if (!apiKey) throw new Error("Google API key required");
 
-          const genAI = createGoogleClient(apiKey);
-
-          // Convert messages to new Google format - the new API expects simple string/Content format
-          const googleContents = conversationHistory.map((msg: any) => ({
-            role: msg.role === "assistant" ? "model" : "user",
-            parts: [{ text: msg.content }],
-          }));
-
-          const googleResponse = await genAI.models.generateContentStream({
+          const genAI = new GoogleGenAI({ apiKey });
+          const googleModel = genAI.getGenerativeModel({ 
             model: args.model,
-            contents: googleContents,
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 8192,
+            },
           });
 
-          for await (const chunk of googleResponse) {
-            const delta = chunk.text;
-            if (delta) {
-              fullContent += delta;
-              
-              await ctx.runMutation(internal.messages.updateContent, {
-                messageId: assistantMessageId,
-                content: fullContent,
-                isStreaming: true,
-                cursor: true,
-              });
+          // Convert to Google format
+          const googleHistory = conversationHistory
+            .filter(msg => msg.role !== "system")
+            .map(msg => ({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.content }],
+            }));
+
+          // Add system prompt to the first user message if exists
+          if (args.systemPrompt && googleHistory.length > 0) {
+            const firstUserMsg = googleHistory.find(msg => msg.role === "user");
+            if (firstUserMsg) {
+              firstUserMsg.parts[0].text = `${args.systemPrompt}\n\n${firstUserMsg.parts[0].text}`;
             }
           }
 
-          // Note: We skip getting response metadata for Google as the API differs
-          inputTokens = 0;
-          outputTokens = 0;
-          break;
-        }
-
-        case "anthropic":
-        case "groq":
-        case "together":
-        case "fireworks":
-        case "deepseek":
-        case "mistral":
-        case "cohere": {
-          // Use OpenRouter for all these providers
-          const apiKey = args.apiKey || process.env.CONVEX_OPENROUTER_API_KEY;
-          if (!apiKey) throw new Error("OpenRouter API key required for " + args.provider);
-
-          const client = createOpenRouterClient(apiKey);
-          
-          // Map model names to OpenRouter format
-          let openRouterModel = args.model;
-          if (args.provider === "anthropic") {
-            openRouterModel = args.model.includes("claude") ? args.model : `anthropic/${args.model}`;
-          } else {
-            openRouterModel = `${args.provider}/${args.model}`;
-          }
-          
-          const stream = await client.chat.completions.create({
-            model: openRouterModel,
-            messages: conversationHistory,
-            stream: true,
-            max_tokens: 4096,
+          const chat = googleModel.startChat({
+            history: googleHistory.slice(0, -1), // All except the last user message
           });
 
-          for await (const chunk of stream) {
-            const delta = chunk.choices[0]?.delta?.content || "";
-            if (delta) {
-              fullContent += delta;
-              
-              await ctx.runMutation(internal.messages.updateContent, {
-                messageId: assistantMessageId,
-                content: fullContent,
-                isStreaming: true,
-                cursor: true,
-              });
-            }
+          const lastMessage = googleHistory[googleHistory.length - 1];
+          const result = await chat.sendMessageStream(lastMessage.parts[0].text);
 
-            // Extract usage if available
-            if ((chunk as any).usage) {
-              inputTokens = (chunk as any).usage.prompt_tokens || 0;
-              outputTokens = (chunk as any).usage.completion_tokens || 0;
+          const streamBuffer = new StreamBuffer();
+          
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              streamBuffer.add(text);
+              
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
             }
+          }
+
+          // Flush remaining
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
+          }
+
+          // Get token counts
+          const response = await result.response;
+          if (response.usageMetadata) {
+            inputTokens = response.usageMetadata.promptTokenCount || 0;
+            outputTokens = response.usageMetadata.candidatesTokenCount || 0;
           }
           break;
         }
@@ -249,10 +450,10 @@ export const sendMessage: any = action({
           throw new Error(`Unsupported provider: ${args.provider}`);
       }
 
-      // Remove cursor and streaming flag when complete
+      // Finalize the message
       await ctx.runMutation(internal.messages.updateContent, {
         messageId: assistantMessageId,
-        content: fullContent,
+        content: sanitizeContent(fullContent),
         isStreaming: false,
         cursor: false,
         inputTokens,
@@ -260,13 +461,13 @@ export const sendMessage: any = action({
       });
 
       return { success: true, messageId: assistantMessageId };
-    } catch (error) {
-      // Handle error by updating the assistant message
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    } catch (error: any) {
+      console.error("AI Generation Error:", error);
       
+      // Update message with error
       await ctx.runMutation(internal.messages.updateContent, {
         messageId: assistantMessageId,
-        content: `Sorry, I encountered an error: ${errorMessage}. Please check your API key and try again.`,
+        content: `I encountered an error while generating a response: ${error.message}. Please try again or check your API settings.`,
         isStreaming: false,
         cursor: false,
       });
@@ -276,46 +477,8 @@ export const sendMessage: any = action({
   },
 });
 
-// Resume an interrupted stream
-export const resumeStream = action({
-  args: {
-    messageId: v.id("messages"),
-    provider: v.string(),
-    model: v.string(),
-    apiKey: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const message = await ctx.runQuery(internal.messages.getById, { 
-      messageId: args.messageId 
-    });
-    
-    if (!message || !message.isStreaming) {
-      throw new Error("Message is not in streaming state");
-    }
-
-    // Get thread and history
-    const thread = await ctx.runQuery(internal.threads.getById, {
-      threadId: message.threadId,
-    });
-    
-    const messages = await ctx.runQuery(api.messages.list, {
-      threadId: message.threadId,
-    });
-
-    // Find messages up to the streaming one
-    const messageIndex = messages.findIndex((m: any) => m._id === args.messageId);
-    const historyMessages = messages.slice(0, messageIndex);
-
-    // Continue streaming from where it left off
-    // Implementation would be similar to sendMessage but continuing from current content
-    // This is a placeholder for the resume logic
-    
-    return { resumed: true };
-  },
-});
-
-// Generate image using DALL-E or other providers
-export const generateImage = action({
+// Image generation action
+export const generateImage: any = action({
   args: {
     threadId: v.id("threads"),
     prompt: v.string(),
@@ -349,14 +512,15 @@ export const generateImage = action({
     });
 
     try {
-      let imageUrl: string;
-
+      let imageUrl = "";
+      
       switch (provider) {
         case "openai": {
           const apiKey = args.apiKey || process.env.CONVEX_OPENAI_API_KEY;
           if (!apiKey) throw new Error("OpenAI API key required");
 
-          const client = createOpenAIClient(apiKey);
+          const client = new OpenAI({ apiKey });
+          
           const response = await client.images.generate({
             model: "dall-e-3",
             prompt: args.prompt,
@@ -364,14 +528,12 @@ export const generateImage = action({
             size: size as any,
           });
 
-          imageUrl = response.data?.[0]?.url || "";
+          imageUrl = response.data[0].url || "";
           break;
         }
         
-        // Add other image generation providers here
-        
         default:
-          throw new Error(`Unsupported image provider: ${provider}`);
+          throw new Error(`Image generation not supported for provider: ${provider}`);
       }
 
       // Update message with image
@@ -383,20 +545,22 @@ export const generateImage = action({
       });
 
       return { success: true, imageUrl };
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Image Generation Error:", error);
+      
       await ctx.runMutation(internal.messages.updateContent, {
         messageId: assistantMessageId,
-        content: `Failed to generate image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        content: `Failed to generate image: ${error.message}`,
         isStreaming: false,
       });
-      
+
       throw error;
     }
   },
 });
 
 // Enhanced message sending with web search and knowledge base
-export const sendMessageWithContext = action({
+export const sendMessageWithContext: any = action({
   args: {
     threadId: v.id("threads"),
     content: v.string(),
@@ -424,145 +588,19 @@ export const sendMessageWithContext = action({
     }))),
   }),
   handler: async (ctx, args) => {
-    let enhancedSystemPrompt = args.systemPrompt || "";
-    let searchResults = [];
-
-    // Perform web searches if enabled
-    if (args.enableWebSearch && args.searchQueries && args.searchQueries.length > 0) {
-      for (const query of args.searchQueries) {
-        try {
-          const results = await searchWeb(query);
-          searchResults.push({ query, results });
-          
-          // Add search results to context
-          enhancedSystemPrompt += `\n\nWeb Search Results for "${query}":\n`;
-          results.forEach((r: any, i: number) => {
-            enhancedSystemPrompt += `${i + 1}. ${r.title}\n   ${r.snippet}\n   Source: ${r.url}\n\n`;
-          });
-        } catch (error) {
-          console.error(`Search failed for query "${query}":`, error);
-        }
-      }
-    }
-
-    // Search knowledge base if enabled
-    if (args.useKnowledgeBase) {
-      try {
-        const kbResults = await ctx.runAction(api.knowledgeBase.search, {
-          query: args.content,
-          projectId: args.projectId,
-          limit: 3,
-        });
-
-        if (kbResults.length > 0) {
-          enhancedSystemPrompt += `\n\nRelevant Knowledge Base Articles:\n`;
-          kbResults.forEach((doc: any, i: number) => {
-            enhancedSystemPrompt += `${i + 1}. ${doc.title}\n   ${doc.content.slice(0, 200)}...\n\n`;
-          });
-        }
-      } catch (error) {
-        console.error("Knowledge base search failed:", error);
-      }
-    }
-
-    // Send message with enhanced context
-    const result = await sendMessage(ctx, {
-      ...args,
-      systemPrompt: enhancedSystemPrompt,
+    // Use the base sendMessage action
+    const result = await ctx.runAction(internal.ai.sendMessage, {
+      threadId: args.threadId,
+      content: args.content,
+      provider: args.provider,
+      model: args.model,
+      apiKey: args.apiKey,
+      attachmentIds: args.attachmentIds,
+      systemPrompt: args.systemPrompt,
     });
 
-    return {
-      ...result,
-      searchResults,
-    };
-  },
-});
-
-// Web search function using Serper API (faster and more reliable)
-async function searchWeb(query: string) {
-  // Try Serper first, fall back to Brave if not configured
-  const serperKey = process.env.CONVEX_SERPER_API_KEY;
-  const braveKey = process.env.CONVEX_BRAVE_SEARCH_API_KEY;
-  
-  if (serperKey) {
-    try {
-      const response = await fetch("https://google.serper.dev/search", {
-        method: "POST",
-        headers: {
-          "X-API-KEY": serperKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          q: query,
-          num: 5,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Serper search failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      return data.organic?.slice(0, 5).map((result: any) => ({
-        title: result.title,
-        url: result.link,
-        snippet: result.snippet,
-      })) || [];
-    } catch (error) {
-      console.error("Serper search failed, trying Brave:", error);
-    }
-  }
-  
-  // Fallback to Brave Search
-  if (braveKey) {
-    const response = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-      {
-        headers: {
-          "Accept": "application/json",
-          "X-Subscription-Token": braveKey,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Brave search failed: ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    // TODO: Implement web search and knowledge base features
     
-    return data.web?.results?.slice(0, 5).map((result: any) => ({
-      title: result.title,
-      url: result.url,
-      snippet: result.description,
-    })) || [];
-  }
-  
-  console.warn("No search API key configured (CONVEX_SERPER_API_KEY or CONVEX_BRAVE_SEARCH_API_KEY)");
-  return [];
-}
-
-// Store search results for a message
-export const storeSearchResults = internalAction({
-  args: {
-    messageId: v.id("messages"),
-    query: v.string(),
-    results: v.array(v.object({
-      title: v.string(),
-      url: v.string(),
-      snippet: v.string(),
-      favicon: v.optional(v.string()),
-    })),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.runMutation(internal.messages.storeSearchResults, {
-      messageId: args.messageId,
-      query: args.query,
-      results: args.results,
-      searchedAt: Date.now(),
-    });
-    return null;
+    return result as any;
   },
 });

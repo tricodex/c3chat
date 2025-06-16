@@ -187,7 +187,22 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       const convexMessages = action.payload.messages;
       const existingMessages = state.messages[action.payload.threadId] || [];
       const optimisticMessages = existingMessages.filter(m => m.isOptimistic);
-      const mergedMessages = [...convexMessages, ...optimisticMessages]
+      
+      // Deduplicate messages by ID to prevent duplicates
+      const messageMap = new Map<string, Message>();
+      
+      // Add convex messages first
+      convexMessages.forEach(msg => {
+        messageMap.set(msg._id, msg);
+      });
+      
+      // Add optimistic messages (they have unique IDs)
+      optimisticMessages.forEach(msg => {
+        messageMap.set(msg._id, msg);
+      });
+      
+      // Convert back to array and sort
+      const mergedMessages = Array.from(messageMap.values())
         .sort((a, b) => (a.localCreatedAt || 0) - (b.localCreatedAt || 0));
       
       return {
@@ -477,7 +492,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const sendMessageMutation = useMutation(api.messages.create);
   const updateMessageMutation = useMutation(internal.messages.updateContent);
   const deleteMessageMutation = useMutation(api.messages.create); // No delete, just create placeholder
-  const generateResponseAction = useAction(api.ai.sendMessage);
+  const generateResponseAction = useAction(api.ai.generateResponse);
 
   // Initialize local database
   useEffect(() => {
