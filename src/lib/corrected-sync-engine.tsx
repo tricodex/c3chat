@@ -81,6 +81,7 @@ type SyncAction =
   | { type: 'UPDATE_OPTIMISTIC_MESSAGE'; payload: { id: string; updates: Partial<Message> } }
   | { type: 'REMOVE_OPTIMISTIC_MESSAGE'; payload: string }
   | { type: 'SELECT_THREAD'; payload: string | null }
+  | { type: 'CLEAR_THREAD_MESSAGES'; payload: string }
   | { type: 'SET_ONLINE'; payload: boolean }
   | { type: 'SET_SYNC_TIME'; payload: number }
   | { type: 'SET_SYNCING'; payload: boolean }
@@ -285,6 +286,14 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       return {
         ...state,
         selectedThreadId: action.payload,
+      };
+
+    case 'CLEAR_THREAD_MESSAGES':
+      const newMessages = { ...state.messages };
+      delete newMessages[action.payload];
+      return {
+        ...state,
+        messages: newMessages,
       };
 
     case 'SET_ONLINE':
@@ -723,9 +732,15 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!state.selectedThreadId || !state.isInitialized) return;
     if (!convexMessages.length && !state.messages[state.selectedThreadId]?.length) return;
     
+    // Only sync messages if they belong to the currently selected thread
+    // This prevents race conditions when switching threads quickly
+    const messagesForCurrentThread = convexMessages.filter(msg => 
+      msg.threadId === state.selectedThreadId
+    );
+    
     dispatch({ 
       type: 'SET_MESSAGES_FROM_CONVEX', 
-      payload: { threadId: state.selectedThreadId, messages: convexMessages }
+      payload: { threadId: state.selectedThreadId, messages: messagesForCurrentThread }
     });
     
     // Cache to local DB
@@ -763,6 +778,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Actions with offline support
   const actions = useMemo(() => ({
     selectThread: async (threadId: string | null) => {
+      // Clear messages from previous thread to prevent cross-contamination
+      if (state.selectedThreadId && state.selectedThreadId !== threadId) {
+        dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId });
+      }
+      
       dispatch({ type: 'SELECT_THREAD', payload: threadId });
       
       if (threadId && localDB.current) {
