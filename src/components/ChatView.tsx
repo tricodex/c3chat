@@ -5,6 +5,7 @@ import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { EmptyState } from "./EmptyState";
 import { FileUpload } from "./FileUpload";
+import { ModelSelector } from "./ModelSelector";
 import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
@@ -204,6 +205,17 @@ export function ChatView() {
             <AgentSelector
               currentAgentId={selectedAgentId}
               onSelect={setSelectedAgentId}
+            />
+            
+            {/* Model Selector */}
+            <ModelSelector
+              currentProvider={selectedProvider}
+              currentModel={selectedModel}
+              onSelect={(provider, model) => {
+                setSelectedProvider(provider);
+                setSelectedModel(model);
+              }}
+              compact
             />
             
             {/* Feature Toggles */}

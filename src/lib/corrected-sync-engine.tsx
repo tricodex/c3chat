@@ -393,9 +393,10 @@ export const useThreads = () => {
   return state.threads;
 };
 
-export const useMessages = () => {
+export const useMessages = (threadId?: string) => {
   const { state } = useEnhancedSync();
-  return state.messages[state.selectedThreadId || ''] || [];
+  const id = threadId || state.selectedThreadId;
+  return state.messages[id || ''] || [];
 };
 
 export const useSelectedThread = () => {
@@ -455,7 +456,9 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const convexThreads = useQuery(api.threads.list) || [];
   const convexMessages = useQuery(
     api.messages.list,
-    state.selectedThreadId ? { threadId: state.selectedThreadId as Id<"threads"> } : "skip"
+    state.selectedThreadId && !state.selectedThreadId.startsWith('temp_') 
+      ? { threadId: state.selectedThreadId as Id<"threads"> } 
+      : "skip"
   ) || [];
 
   // Convex mutations
