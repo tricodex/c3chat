@@ -31,12 +31,6 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   
-  // Debug logging
-  console.log('MessageList rendering:', {
-    threadId,
-    messageCount: messages.length,
-    messageIds: messages.map(m => m._id)
-  });
   
   if (messages.length === 0) {
     return (
@@ -86,7 +80,6 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
   return (
     <div className="c3-messages c3-scrollbar">
       {messages.map((message, index) => {
-        console.log(`Rendering message ${index}:`, message._id, message.content.substring(0, 30));
         
         // Get provider icon for assistant messages
         const ProviderIcon = message.role === "assistant" && message.provider 
@@ -129,7 +122,7 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
               />
             ) : message.role === "assistant" ? (
               <>
-                {message.isStreaming && !message.content ? (
+                {message.isStreaming && (!message.content || message.content.length === 0) ? (
                   <div className="c3-typing-indicator">
                     <div className="c3-typing-dot" />
                     <div className="c3-typing-dot" />

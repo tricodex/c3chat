@@ -80,6 +80,7 @@ type SyncAction =
   | { type: 'ADD_OPTIMISTIC_MESSAGE'; payload: Message }
   | { type: 'UPDATE_OPTIMISTIC_MESSAGE'; payload: { id: string; updates: Partial<Message> } }
   | { type: 'REMOVE_OPTIMISTIC_MESSAGE'; payload: string }
+  | { type: 'CLEANUP_OLD_OPTIMISTIC_MESSAGES'; payload: { threadId: string; cutoffTime: number } }
   | { type: 'SELECT_THREAD'; payload: string | null }
   | { type: 'CLEAR_THREAD_MESSAGES'; payload: string }
   | { type: 'SET_ONLINE'; payload: boolean }
@@ -183,12 +184,6 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       };
 
     case 'SET_MESSAGES_FROM_CONVEX':
-      console.log('[SYNC] SET_MESSAGES_FROM_CONVEX:', {
-        threadId: action.payload.threadId,
-        messageCount: action.payload.messages.length,
-        currentThreadId: state.selectedThreadId,
-        messageIds: action.payload.messages.map((m: any) => m._id)
-      });
       
       // Only update messages if the thread matches the currently selected thread
       if (action.payload.threadId !== state.selectedThreadId) {
@@ -196,45 +191,35 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         return state;
       }
       
-      // When we receive messages from Convex, they are the source of truth
-      // We should NOT keep optimistic messages - they should have been removed
-      // when the real messages were created
       const convexMessages = action.payload.messages;
       const existingMessages = state.messages[action.payload.threadId] || [];
       
-      // Only keep optimistic messages that are truly in-flight
-      // (created very recently, within last 5 seconds)
+      // Keep optimistic messages that are still in-flight
+      // (created within last 2 seconds to handle server round-trip time)
       const now = Date.now();
-      const recentOptimisticMessages = existingMessages.filter(m => 
+      const inFlightOptimisticMessages = existingMessages.filter(m => 
         m.isOptimistic && 
         m.localCreatedAt && 
-        (now - m.localCreatedAt) < 5000
+        (now - m.localCreatedAt) < 2000
       );
       
-      // Create a set of Convex message contents for duplicate detection
-      const convexContentSet = new Set(convexMessages.map(m => m.content.trim()));
-      
-      // Filter out optimistic messages that have matching content in Convex messages
-      const trulyOptimisticMessages = recentOptimisticMessages.filter(om => 
-        !convexContentSet.has(om.content.trim())
-      );
-      
-      // Deduplicate messages by ID
+      // Create a map for deduplication - Convex messages take precedence
       const messageMap = new Map<string, Message>();
       
-      // Add convex messages first (they are the truth)
+      // Add all Convex messages
       convexMessages.forEach(msg => {
-        if (msg.threadId === action.payload.threadId) {
+        messageMap.set(msg._id, msg);
+      });
+      
+      // Add in-flight optimistic messages that don't have matching content in Convex
+      const convexContents = new Set(convexMessages.map(m => m.content.trim()));
+      inFlightOptimisticMessages.forEach(msg => {
+        if (!convexContents.has(msg.content.trim())) {
           messageMap.set(msg._id, msg);
         }
       });
       
-      // Only add truly optimistic messages that don't have server equivalents
-      trulyOptimisticMessages.forEach(msg => {
-        messageMap.set(msg._id, msg);
-      });
-      
-      // Convert back to array and sort by creation time
+      // Sort by timestamp
       const mergedMessages = Array.from(messageMap.values())
         .sort((a, b) => {
           const aTime = a._creationTime || a.localCreatedAt || 0;
@@ -242,13 +227,6 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
           return aTime - bTime;
         });
       
-      console.log('SET_MESSAGES_FROM_CONVEX:', {
-        threadId: action.payload.threadId,
-        convexCount: convexMessages.length,
-        optimisticCount: trulyOptimisticMessages.length,
-        mergedCount: mergedMessages.length,
-        messageIds: mergedMessages.map(m => m._id)
-      });
       
       return {
         ...state,
@@ -332,13 +310,35 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
         state.messages[tId].some(m => m._id === action.payload)
       );
       
-      if (!msgThreadId) return state;
+      
+      if (!msgThreadId) {
+        console.warn('Could not find thread for optimistic message:', action.payload);
+        return state;
+      }
       
       return {
         ...state,
         messages: {
           ...state.messages,
           [msgThreadId]: state.messages[msgThreadId].filter(m => m._id !== action.payload),
+        },
+      };
+
+    case 'CLEANUP_OLD_OPTIMISTIC_MESSAGES':
+      const { threadId: cleanupThreadId, cutoffTime } = action.payload;
+      if (!state.messages[cleanupThreadId]) return state;
+      
+      const cleanedMessages = state.messages[cleanupThreadId].filter(m => 
+        !m.isOptimistic || 
+        !m.localCreatedAt || 
+        m.localCreatedAt >= cutoffTime
+      );
+      
+      return {
+        ...state,
+        messages: {
+          ...state.messages,
+          [cleanupThreadId]: cleanedMessages,
         },
       };
 
@@ -469,21 +469,23 @@ export const useMessages = (threadId?: string) => {
   const { state } = useEnhancedSync();
   const id = threadId || state.selectedThreadId;
   
-  // Strict thread isolation - only return messages for the requested thread
-  // This prevents any cross-contamination between threads
-  if (id && state.messages[id]) {
-    // Additional safety check - filter out any messages that don't belong
-    return state.messages[id].filter(msg => {
-      // For optimistic messages, they should have the correct threadId
-      if (msg.isOptimistic) {
+  return useMemo(() => {
+    // Strict thread isolation - only return messages for the requested thread
+    // This prevents any cross-contamination between threads
+    if (id && state.messages[id]) {
+      // Additional safety check - filter out any messages that don't belong
+      return state.messages[id].filter(msg => {
+        // For optimistic messages, they should have the correct threadId
+        if (msg.isOptimistic) {
+          return msg.threadId === id;
+        }
+        // For server messages, double-check the threadId
         return msg.threadId === id;
-      }
-      // For server messages, double-check the threadId
-      return msg.threadId === id;
-    });
-  }
-  
-  return [];
+      });
+    }
+    
+    return [];
+  }, [id, state.messages]);
 };
 
 export const useSelectedThread = () => {
@@ -785,6 +787,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Update threads
     dispatch({ type: 'SET_THREADS_FROM_CONVEX', payload: convexThreads });
     
+    // Auto-select first thread if no thread is selected
+    if (!state.selectedThreadId && convexThreads.length > 0) {
+      const firstThread = convexThreads[0];
+      dispatch({ type: 'SELECT_THREAD', payload: firstThread._id });
+    }
+    
     // Cache to local DB
     const syncToLocal = async () => {
       if (!localDB.current) return;
@@ -803,11 +811,13 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     syncToLocal().then(() => {
       syncInProgress.current = false;
     });
-  }, [convexThreads, state.isInitialized]);
+  }, [convexThreads, state.isInitialized, state.selectedThreadId]);
 
-  // Memoize message IDs to prevent infinite loops
-  const convexMessageIds = useMemo(() => {
-    return convexMessages.map(m => m._id).join(',');
+  // Memoize messages to prevent unnecessary updates
+  const memoizedConvexMessages = useMemo(() => {
+    // Only return a new reference if the actual content has changed
+    const messageIds = convexMessages.map(m => m._id).sort().join(',');
+    return { messages: convexMessages, ids: messageIds };
   }, [convexMessages]);
 
   // Track current thread to prevent stale updates
@@ -827,7 +837,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const queryThreadId = state.selectedThreadId.startsWith('temp_') ? null : state.selectedThreadId;
     
     // If the query is skipped or returns no messages, clear the local state
-    if (!queryThreadId || !convexMessages.length) {
+    if (!queryThreadId || !memoizedConvexMessages.messages.length) {
       // Only update if we're still on the same thread
       if (currentThreadRef.current === effectThreadId) {
         dispatch({ 
@@ -840,7 +850,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     // Double-check that ALL messages belong to the currently selected thread
     // This is crucial to prevent cross-thread contamination
-    const messagesForCurrentThread = convexMessages.filter(msg => {
+    const messagesForCurrentThread = memoizedConvexMessages.messages.filter(msg => {
       const belongsToThread = msg.threadId === effectThreadId;
       if (!belongsToThread) {
         console.warn(`Message ${msg._id} belongs to thread ${msg.threadId} but current thread is ${effectThreadId}`);
@@ -871,7 +881,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       syncMessagesToLocal();
     }
-  }, [convexMessageIds, state.selectedThreadId, state.isInitialized]); // Don't include convexMessages to prevent loops
+  }, [memoizedConvexMessages.ids, state.selectedThreadId, state.isInitialized]); // Use memoized IDs to prevent loops
 
   // Save selected thread to metadata and clear messages when thread changes
   useEffect(() => {
@@ -902,14 +912,10 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (hasOldOptimistic) {
           console.log('Cleaning up old optimistic messages for thread:', threadId);
           dispatch({
-            type: 'SET_MESSAGES_FROM_CONVEX',
+            type: 'CLEANUP_OLD_OPTIMISTIC_MESSAGES',
             payload: {
               threadId,
-              messages: messages.filter(m => 
-                !m.isOptimistic || 
-                !m.localCreatedAt || 
-                m.localCreatedAt >= cutoffTime
-              ),
+              cutoffTime,
             },
           });
         }
@@ -1214,7 +1220,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           model: model || thread.model || 'gpt-4o-mini',
           hasApiKey: !!apiKey,
           attachmentIds: attachmentIds?.length || 0,
-          agentId
+          agentId,
+          content: content.substring(0, 50) + '...'
         });
         
         // Create the user message on the server
@@ -1225,8 +1232,9 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           attachmentIds: attachmentIds && attachmentIds.length > 0 ? attachmentIds as Id<"attachments">[] : undefined,
         });
         
-        // Remove optimistic message now that real message is created
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
+        // Don't remove optimistic message immediately - let it be replaced
+        // when Convex query updates with the real message
+        console.log('✅ User message sent, optimistic message will be replaced when Convex updates');
         
         // Generate AI response
         await generateResponseAction({
