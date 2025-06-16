@@ -183,32 +183,72 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       };
 
     case 'SET_MESSAGES_FROM_CONVEX':
+      console.log('[SYNC] SET_MESSAGES_FROM_CONVEX:', {
+        threadId: action.payload.threadId,
+        messageCount: action.payload.messages.length,
+        currentThreadId: state.selectedThreadId,
+        messageIds: action.payload.messages.map((m: any) => m._id)
+      });
+      
       // Only update messages if the thread matches the currently selected thread
       if (action.payload.threadId !== state.selectedThreadId) {
+        console.warn('[SYNC] Ignoring messages for non-selected thread:', action.payload.threadId, 'current:', state.selectedThreadId);
         return state;
       }
       
-      // Merge Convex messages with optimistic messages
+      // When we receive messages from Convex, they are the source of truth
+      // We should NOT keep optimistic messages - they should have been removed
+      // when the real messages were created
       const convexMessages = action.payload.messages;
       const existingMessages = state.messages[action.payload.threadId] || [];
-      const optimisticMessages = existingMessages.filter(m => m.isOptimistic);
       
-      // Deduplicate messages by ID to prevent duplicates
+      // Only keep optimistic messages that are truly in-flight
+      // (created very recently, within last 5 seconds)
+      const now = Date.now();
+      const recentOptimisticMessages = existingMessages.filter(m => 
+        m.isOptimistic && 
+        m.localCreatedAt && 
+        (now - m.localCreatedAt) < 5000
+      );
+      
+      // Create a set of Convex message contents for duplicate detection
+      const convexContentSet = new Set(convexMessages.map(m => m.content.trim()));
+      
+      // Filter out optimistic messages that have matching content in Convex messages
+      const trulyOptimisticMessages = recentOptimisticMessages.filter(om => 
+        !convexContentSet.has(om.content.trim())
+      );
+      
+      // Deduplicate messages by ID
       const messageMap = new Map<string, Message>();
       
-      // Add convex messages first
+      // Add convex messages first (they are the truth)
       convexMessages.forEach(msg => {
+        if (msg.threadId === action.payload.threadId) {
+          messageMap.set(msg._id, msg);
+        }
+      });
+      
+      // Only add truly optimistic messages that don't have server equivalents
+      trulyOptimisticMessages.forEach(msg => {
         messageMap.set(msg._id, msg);
       });
       
-      // Add optimistic messages (they have unique IDs)
-      optimisticMessages.forEach(msg => {
-        messageMap.set(msg._id, msg);
-      });
-      
-      // Convert back to array and sort
+      // Convert back to array and sort by creation time
       const mergedMessages = Array.from(messageMap.values())
-        .sort((a, b) => (a.localCreatedAt || 0) - (b.localCreatedAt || 0));
+        .sort((a, b) => {
+          const aTime = a._creationTime || a.localCreatedAt || 0;
+          const bTime = b._creationTime || b.localCreatedAt || 0;
+          return aTime - bTime;
+        });
+      
+      console.log('SET_MESSAGES_FROM_CONVEX:', {
+        threadId: action.payload.threadId,
+        convexCount: convexMessages.length,
+        optimisticCount: trulyOptimisticMessages.length,
+        mergedCount: mergedMessages.length,
+        messageIds: mergedMessages.map(m => m._id)
+      });
       
       return {
         ...state,
@@ -401,9 +441,10 @@ interface SyncContextValue {
     sendMessage: (content: string, threadId: string, provider?: string, model?: string, apiKey?: string | null, attachmentIds?: string[], agentId?: string) => Promise<void>;
     updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
     deleteMessage: (messageId: string) => Promise<void>;
-    createBranch: (threadId: string, messageId?: string, title?: string) => Promise<string>;
+    createBranch: (threadId: string, messageId?: string) => Promise<string>;
     shareThread: (threadId: string) => Promise<string>;
     exportThread?: (threadId: string, format: string) => Promise<void>;
+    regenerateMessage: (messageId: string, provider?: string, model?: string) => Promise<void>;
     retryOperation: (operationId: string) => Promise<void>;
     clearError: () => void;
   };
@@ -517,7 +558,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const updateThreadMutation = useMutation(api.threads.updateSettings);
   const deleteThreadMutation = useMutation(api.threads.remove);
   const sendMessageMutation = useMutation(api.messages.create);
-  const updateMessageMutation = useMutation(internal.messages.updateContent);
+  const updateMessageMutation = useMutation(api.messages.update);
   const deleteMessageMutation = useMutation(api.messages.create); // No delete, just create placeholder
   const generateResponseAction = useAction(api.ai.generateResponse);
 
@@ -830,7 +871,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       syncMessagesToLocal();
     }
-  }, [convexMessageIds, state.selectedThreadId, state.isInitialized, convexMessages]); // Include convexMessages for data sync
+  }, [convexMessageIds, state.selectedThreadId, state.isInitialized]); // Don't include convexMessages to prevent loops
 
   // Save selected thread to metadata and clear messages when thread changes
   useEffect(() => {
@@ -843,10 +884,45 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: { threadId: '', messages: [] } });
     }
   }, [state.selectedThreadId, state.isInitialized]);
+  
+  // Clean up old optimistic messages periodically
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const cutoffTime = now - 10000; // Remove optimistic messages older than 10 seconds
+      
+      Object.keys(state.messages).forEach(threadId => {
+        const messages = state.messages[threadId];
+        const hasOldOptimistic = messages.some(m => 
+          m.isOptimistic && 
+          m.localCreatedAt && 
+          m.localCreatedAt < cutoffTime
+        );
+        
+        if (hasOldOptimistic) {
+          console.log('Cleaning up old optimistic messages for thread:', threadId);
+          dispatch({
+            type: 'SET_MESSAGES_FROM_CONVEX',
+            payload: {
+              threadId,
+              messages: messages.filter(m => 
+                !m.isOptimistic || 
+                !m.localCreatedAt || 
+                m.localCreatedAt >= cutoffTime
+              ),
+            },
+          });
+        }
+      });
+    }, 5000); // Run every 5 seconds
+    
+    return () => clearInterval(cleanupInterval);
+  }, [state.messages]);
 
   // Advanced actions from AI module
   const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
   const generateImageAction = useAction(api.ai.generateImage);
+  const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   
   // Thread actions
   const createBranchMutation = useMutation(api.threads.createBranch);
@@ -1275,15 +1351,14 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     },
 
-    createBranch: async (threadId: string, messageId?: string, title?: string): Promise<string> => {
+    createBranch: async (threadId: string, messageId?: string): Promise<string> => {
       if (!state.isOnline) {
         throw new Error('Cannot create branch while offline');
       }
       
       const newThreadId = await createBranchMutation({
-        threadId: threadId as Id<"threads">,
-        messageId: messageId as Id<"messages"> | undefined,
-        title,
+        parentThreadId: threadId as Id<"threads">,
+        branchPoint: messageId as Id<"messages"> | undefined,
       });
       
       return newThreadId;
@@ -1309,6 +1384,22 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
     } : undefined,
 
+    regenerateMessage: async (messageId: string, provider?: string, model?: string) => {
+      if (!state.isOnline) {
+        throw new Error('Cannot regenerate message while offline');
+      }
+      
+      const result = await regenerateResponseAction({
+        messageId: messageId as Id<"messages">,
+        provider,
+        model,
+      });
+      
+      if (!result.success) {
+        throw new Error('Failed to regenerate message');
+      }
+    },
+
     retryOperation: async (operationId: string) => {
       const operation = state.pendingOperations.find(op => op.id === operationId);
       if (!operation) return;
@@ -1322,7 +1413,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     clearError: () => {
       dispatch({ type: 'SET_ERROR', payload: null });
     },
-  }), [state, localDB, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction]);
+  }), [state, localDB, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, regenerateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction]);
 
   const value: SyncContextValue = {
     state,

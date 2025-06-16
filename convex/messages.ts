@@ -66,6 +66,42 @@ export const create = mutation({
   },
 });
 
+// Public mutation for users to update their own messages
+export const update = mutation({
+  args: {
+    messageId: v.id("messages"),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get the message
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    // Verify user owns the thread
+    const thread = await ctx.db.get(message.threadId);
+    if (!thread || thread.userId !== userId) {
+      throw new Error("Unauthorized");
+    }
+
+    // Only allow editing user messages
+    if (message.role !== "user") {
+      throw new Error("Can only edit user messages");
+    }
+
+    await ctx.db.patch(args.messageId, {
+      content: args.content,
+      editedAt: Date.now(),
+    });
+  },
+});
+
 export const updateContent = internalMutation({
   args: {
     messageId: v.id("messages"),

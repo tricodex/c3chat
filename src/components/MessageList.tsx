@@ -4,6 +4,7 @@ import { Message } from "../lib/corrected-sync-engine";
 import { Id } from "../../convex/_generated/dataModel";
 import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock, Cpu, MessageSquare, Search, Braces } from "lucide-react";
 import { MessageActions } from "./MessageActions";
+import { MessageEdit } from "./MessageEdit";
 
 interface MessageListProps {
   messages: Message[];
@@ -28,6 +29,14 @@ const providerIcons: Record<string, React.ComponentType<any>> = {
 
 export function MessageList({ messages, messagesEndRef, threadId }: MessageListProps) {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  
+  // Debug logging
+  console.log('MessageList rendering:', {
+    threadId,
+    messageCount: messages.length,
+    messageIds: messages.map(m => m._id)
+  });
   
   if (messages.length === 0) {
     return (
@@ -63,9 +72,22 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
     );
   }
 
+  // Check for duplicate IDs
+  const messageIds = messages.map(m => m._id);
+  const uniqueIds = new Set(messageIds);
+  if (messageIds.length !== uniqueIds.size) {
+    console.error('DUPLICATE MESSAGE IDS DETECTED!', {
+      total: messageIds.length,
+      unique: uniqueIds.size,
+      duplicates: messageIds.filter((id, index) => messageIds.indexOf(id) !== index)
+    });
+  }
+  
   return (
     <div className="c3-messages c3-scrollbar">
-      {messages.map((message) => {
+      {messages.map((message, index) => {
+        console.log(`Rendering message ${index}:`, message._id, message.content.substring(0, 30));
+        
         // Get provider icon for assistant messages
         const ProviderIcon = message.role === "assistant" && message.provider 
           ? providerIcons[message.provider] || Bot 
@@ -73,7 +95,7 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
         
         return (
           <div
-            key={message._id}
+            key={`${message._id}-${index}`}
             className={`c3-message ${message.role} ${message.isOptimistic ? 'optimistic' : ''}`}
             onMouseEnter={() => setHoveredMessageId(message._id)}
             onMouseLeave={() => setHoveredMessageId(null)}
@@ -98,7 +120,14 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
             )}
 
             {/* Content */}
-            {message.role === "assistant" ? (
+            {editingMessageId === message._id ? (
+              <MessageEdit
+                messageId={message._id}
+                initialContent={message.content}
+                onCancel={() => setEditingMessageId(null)}
+                onSave={() => setEditingMessageId(null)}
+              />
+            ) : message.role === "assistant" ? (
               <>
                 {message.isStreaming && !message.content ? (
                   <div className="c3-typing-indicator">
@@ -132,8 +161,14 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
             )}
             
             {/* Message Actions */}
-            {hoveredMessageId === message._id && !message.isOptimistic && (
-              <MessageActions content={message.content} messageId={message._id} />
+            {hoveredMessageId === message._id && !message.isOptimistic && editingMessageId !== message._id && (
+              <MessageActions 
+                content={message.content} 
+                messageId={message._id}
+                threadId={threadId}
+                role={message.role}
+                onEdit={() => setEditingMessageId(message._id)}
+              />
             )}
             
             {/* Metadata - Compact */}

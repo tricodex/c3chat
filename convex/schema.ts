@@ -90,6 +90,8 @@ const applicationTables = {
     }))),
     // Image generation
     generatedImageUrl: v.optional(v.string()),
+    // Edit tracking
+    editedAt: v.optional(v.number()),
   })
     .index("by_thread", ["threadId"]),
 

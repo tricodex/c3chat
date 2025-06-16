@@ -100,8 +100,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Message Filtering**: Always double-check that messages belong to the current thread before rendering
 - **Convex Queries**: Ensure message queries are properly scoped to the selected thread ID
 
-## CRITICAL: Enterprise Features
-- **Copy Functionality**: All messages have copy-to-clipboard functionality (see `MessageActions` component)
-- **Message Actions**: Hover over messages to see available actions
-- **CSS Classes**: Use `c3-message-action` for action buttons, `c3-message-actions` for container
-- **Future Features**: Message branching, editing, and regeneration are partially implemented in `EnterpriseMessageList`
+## CRITICAL: Enterprise Features (Fully Implemented)
+- **Copy Functionality**: All messages have copy-to-clipboard functionality with visual feedback
+- **Message Editing**: User messages can be edited in-place with auto-resize textarea
+- **Response Regeneration**: Assistant messages can be regenerated, creating new responses while preserving history
+- **Conversation Branching**: Fork conversations at any message to explore alternative paths
+- **Message Actions**: Hover over messages to see context-sensitive actions:
+  - Copy (all messages)
+  - Branch (all messages)
+  - Edit (user messages only)
+  - Regenerate (assistant messages only)
+- **CSS Classes**: 
+  - `c3-message-action` for action buttons
+  - `c3-message-actions` for container
+  - `c3-message-edit` for edit mode
+  - `c3-edit-textarea` for edit input
+- **Implementation**: See `MessageActions.tsx`, `MessageEdit.tsx`, and `MessageList.tsx`

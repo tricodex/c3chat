@@ -130,6 +130,8 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         <IsolatedChatView />
       </div>
+      
+      {/* Debug */}
     </div>
   );
 }

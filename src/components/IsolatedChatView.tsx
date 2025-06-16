@@ -11,11 +11,17 @@ export function IsolatedChatView() {
   const selectedThread = useSelectedThread();
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   
+  console.log('[IsolatedChatView] Render:', {
+    selectedThreadId: selectedThread?._id,
+    currentThreadId,
+    stateThreadId: state.selectedThreadId
+  });
+  
   // Track thread changes and ensure complete isolation
   useEffect(() => {
     if (selectedThread?._id !== currentThreadId) {
       // Thread has changed - ensure complete isolation
-      console.log(`Thread changed from ${currentThreadId} to ${selectedThread?._id}`);
+      console.log(`[IsolatedChatView] Thread changed from ${currentThreadId} to ${selectedThread?._id}`);
       setCurrentThreadId(selectedThread?._id || null);
     }
   }, [selectedThread?._id, currentThreadId]);

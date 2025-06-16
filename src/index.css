@@ -628,6 +628,68 @@ body::before {
   }
 }
 
+/* Message Edit */
+.c3-message-edit {
+  @apply flex items-start gap-2 w-full;
+}
+
+.c3-edit-textarea {
+  @apply flex-1 p-2 rounded-md text-sm resize-none;
+  background-color: var(--c3-surface-secondary);
+  border: 1px solid var(--c3-border);
+  color: var(--c3-text-primary);
+  min-height: 2.5rem;
+  
+  &:focus {
+    outline: none;
+    border-color: var(--c3-primary);
+    box-shadow: 0 0 0 2px rgba(var(--c3-primary-rgb), 0.15);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.c3-edit-actions {
+  @apply flex items-center gap-1;
+}
+
+.c3-edit-save,
+.c3-edit-cancel {
+  @apply p-1.5 rounded-md transition-all duration-150;
+}
+
+.c3-edit-save {
+  background-color: var(--c3-primary);
+  color: white;
+  
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.c3-edit-cancel {
+  background-color: var(--c3-surface-tertiary);
+  color: var(--c3-text-secondary);
+  
+  &:hover {
+    background-color: var(--c3-surface-secondary);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 /* =======================
    THREAD LIST - Minimal Style
    ======================= */

@@ -1,0 +1,3 @@
+// This file is disabled to prevent duplicate message rendering
+// ChatInterface uses VirtualMessageList which doesn't have copy functionality
+// and was causing duplicate messages to appear
