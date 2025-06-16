@@ -92,3 +92,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Use: `await genAI.models.generateContentStream({ model: 'gemini-2.0-flash', contents: ... });`
   - The new SDK is the unified SDK for all Google GenAI models (Gemini, Veo, Imagen, etc.)
 - **Package Manager**: Use `bun` (NOT npm) for all operations
+
+## CRITICAL: Thread Isolation
+- **Message Isolation**: Messages MUST be strictly isolated by thread ID to prevent cross-contamination
+- **Thread Switching**: Always clear ALL messages when switching threads (see `SELECT_THREAD` in sync engine)
+- **Component Usage**: Use `IsolatedChatView` instead of `ChatView` directly for proper thread isolation
+- **Message Filtering**: Always double-check that messages belong to the current thread before rendering
+- **Convex Queries**: Ensure message queries are properly scoped to the selected thread ID
+
+## CRITICAL: Enterprise Features
+- **Copy Functionality**: All messages have copy-to-clipboard functionality (see `MessageActions` component)
+- **Message Actions**: Hover over messages to see available actions
+- **CSS Classes**: Use `c3-message-action` for action buttons, `c3-message-actions` for container
+- **Future Features**: Message branching, editing, and regeneration are partially implemented in `EnterpriseMessageList`

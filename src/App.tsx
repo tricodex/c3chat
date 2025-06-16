@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 import { useState, useEffect } from "react";
 import { EnhancedSyncProvider } from "./lib/corrected-sync-engine.tsx";
 import { Sidebar } from "./components/Sidebar";
-import { ChatView } from "./components/ChatView";
+import { IsolatedChatView } from "./components/IsolatedChatView";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Header } from "./components/Header";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -128,7 +128,7 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
       {/* Main Content */}
       <div className="c3-main">
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        <ChatView />
+        <IsolatedChatView />
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
-import { RefObject } from "react";
+import { RefObject, useState } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { Message } from "../lib/corrected-sync-engine";
 import { Id } from "../../convex/_generated/dataModel";
 import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock, Cpu, MessageSquare, Search, Braces } from "lucide-react";
+import { MessageActions } from "./MessageActions";
 
 interface MessageListProps {
   messages: Message[];
@@ -26,6 +27,8 @@ const providerIcons: Record<string, React.ComponentType<any>> = {
 };
 
 export function MessageList({ messages, messagesEndRef, threadId }: MessageListProps) {
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  
   if (messages.length === 0) {
     return (
       <div className="c3-messages c3-scrollbar">
@@ -72,6 +75,8 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
           <div
             key={message._id}
             className={`c3-message ${message.role} ${message.isOptimistic ? 'optimistic' : ''}`}
+            onMouseEnter={() => setHoveredMessageId(message._id)}
+            onMouseLeave={() => setHoveredMessageId(null)}
           >
             {/* Avatar */}
             <div className="c3-message-avatar">
@@ -124,6 +129,11 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
               </>
             ) : (
               <div className="whitespace-pre-wrap" style={{ color: 'var(--c3-msg-user-text)' }}>{message.content}</div>
+            )}
+            
+            {/* Message Actions */}
+            {hoveredMessageId === message._id && !message.isOptimistic && (
+              <MessageActions content={message.content} messageId={message._id} />
             )}
             
             {/* Metadata - Compact */}

@@ -303,9 +303,11 @@ function syncReducer(state: SyncState, action: SyncAction): SyncState {
       };
 
     case 'SELECT_THREAD':
+      // Complete thread isolation - clear ALL messages when switching
       return {
         ...state,
         selectedThreadId: action.payload,
+        messages: {}, // Clear all messages completely
       };
 
     case 'CLEAR_THREAD_MESSAGES':
@@ -426,9 +428,18 @@ export const useMessages = (threadId?: string) => {
   const { state } = useEnhancedSync();
   const id = threadId || state.selectedThreadId;
   
-  // Only return messages if the threadId matches the current selection
-  if (id && id === state.selectedThreadId) {
-    return state.messages[id] || [];
+  // Strict thread isolation - only return messages for the requested thread
+  // This prevents any cross-contamination between threads
+  if (id && state.messages[id]) {
+    // Additional safety check - filter out any messages that don't belong
+    return state.messages[id].filter(msg => {
+      // For optimistic messages, they should have the correct threadId
+      if (msg.isOptimistic) {
+        return msg.threadId === id;
+      }
+      // For server messages, double-check the threadId
+      return msg.threadId === id;
+    });
   }
   
   return [];
@@ -490,11 +501,15 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Convex queries
   const convexThreads = useQuery(api.threads.list) || [];
+  
+  // Thread-scoped message query with proper cleanup
+  const selectedThreadIdForQuery = state.selectedThreadId && !state.selectedThreadId.startsWith('temp_') 
+    ? state.selectedThreadId as Id<"threads"> 
+    : null;
+    
   const convexMessages = useQuery(
     api.messages.list,
-    state.selectedThreadId && !state.selectedThreadId.startsWith('temp_') 
-      ? { threadId: state.selectedThreadId as Id<"threads"> } 
-      : "skip"
+    selectedThreadIdForQuery ? { threadId: selectedThreadIdForQuery } : "skip"
   ) || [];
 
   // Convex mutations

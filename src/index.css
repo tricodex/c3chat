@@ -575,6 +575,59 @@ body::before {
   border-radius: var(--c3-radius-md);
 }
 
+/* Button Sizes */
+.c3-button-sm {
+  @apply px-2.5 py-1 text-xs;
+}
+
+/* =======================
+   ENTERPRISE MESSAGE FEATURES
+   ======================= */
+
+/* Message Actions */
+.c3-message-actions {
+  @apply absolute top-2 right-2 flex items-center gap-1 opacity-0 transition-opacity;
+}
+
+.c3-message:hover .c3-message-actions {
+  opacity: 1;
+}
+
+.c3-message-action {
+  @apply p-1.5 rounded-md transition-all duration-150;
+  background-color: var(--c3-surface-hover);
+  color: var(--c3-text-tertiary);
+  opacity: 0.7;
+  
+  &:hover {
+    opacity: 1;
+    background-color: var(--c3-surface-secondary);
+    color: var(--c3-text-secondary);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.c3-message.selected {
+  background-color: var(--c3-surface-hover);
+}
+
+.c3-textarea {
+  @apply w-full rounded-lg px-3 py-2 text-sm;
+  background-color: var(--c3-surface-primary);
+  border: 1px solid var(--c3-border-subtle);
+  color: var(--c3-text-primary);
+  resize: vertical;
+  
+  &:focus {
+    outline: none;
+    border-color: var(--c3-primary);
+    box-shadow: 0 0 0 2px rgba(var(--c3-primary-rgb), 0.1);
+  }
+}
+
 /* =======================
    THREAD LIST - Minimal Style
    ======================= */
