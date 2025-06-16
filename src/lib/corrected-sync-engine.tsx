@@ -713,9 +713,15 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
   }, [convexThreads, state.isInitialized]);
 
+  // Memoize message IDs to prevent infinite loops
+  const convexMessageIds = useMemo(() => {
+    return convexMessages.map(m => m._id).join(',');
+  }, [convexMessages]);
+
   // Sync messages to local state
   useEffect(() => {
     if (!state.selectedThreadId || !state.isInitialized) return;
+    if (!convexMessages.length && !state.messages[state.selectedThreadId]?.length) return;
     
     dispatch({ 
       type: 'SET_MESSAGES_FROM_CONVEX', 
@@ -736,7 +742,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
     
     syncMessagesToLocal();
-  }, [convexMessages, state.selectedThreadId, state.isInitialized]);
+  }, [convexMessageIds, state.selectedThreadId, state.isInitialized, convexMessages]); // Include convexMessages for data sync
 
   // Save selected thread to metadata
   useEffect(() => {

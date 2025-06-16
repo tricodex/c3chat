@@ -318,6 +318,9 @@ body::before {
   box-shadow: 0 4px 20px oklch(from var(--c3-primary) l c h / 0.3);
 }
 
+/* User message text color is now handled by the inline style using --c3-msg-user-text variable */
+/* This ensures proper theming: white text in dark mode, black text in light mode */
+
 .c3-message.user .c3-message-content:hover {
   box-shadow: 0 6px 24px oklch(from var(--c3-primary) l c h / 0.4);
   transform: translateY(-2px);

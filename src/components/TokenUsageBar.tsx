@@ -11,7 +11,13 @@ interface TokenUsageBarProps {
 
 export function TokenUsageBar({ threadId }: TokenUsageBarProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const messages = useQuery(api.messages.list, { threadId });
+  
+  // Skip query if threadId is temporary (starts with "temp_")
+  const isTemporaryThread = typeof threadId === 'string' && threadId.startsWith('temp_');
+  const messages = useQuery(
+    api.messages.list, 
+    isTemporaryThread ? "skip" : { threadId }
+  );
   
   // Calculate token usage
   const tokenStats = messages?.reduce((acc, msg) => {

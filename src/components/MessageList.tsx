@@ -123,7 +123,7 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
                 )}
               </>
             ) : (
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div className="whitespace-pre-wrap" style={{ color: 'var(--c3-msg-user-text)' }}>{message.content}</div>
             )}
             
             {/* Metadata - Compact */}
