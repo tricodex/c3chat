@@ -10,7 +10,7 @@ import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Trash2, FileText } from "lucide-react";
 import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
@@ -43,10 +43,10 @@ export function ChatView() {
   // Use the actual provider and model from the selected thread instead of local state
   const selectedProvider = selectedThread?.provider || "openai";
   const selectedModel = selectedThread?.model || "gpt-4o";
-  const [enableWebSearch, setEnableWebSearch] = useState(false);
-  const [isDeepResearchMode, setIsDeepResearchMode] = useState(false);
+  const [showCommandsDropdown, setShowCommandsDropdown] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,6 +55,22 @@ export function ChatView() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowCommandsDropdown(false);
+      }
+    };
+
+    if (showCommandsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showCommandsDropdown]);
 
   const handleSubmit = async (content: string) => {
     if (!selectedThread || !content.trim()) return;
@@ -188,52 +204,33 @@ export function ChatView() {
             return;
         }
       } else {
-        // Regular message with optional web search
-        if (enableWebSearch || isDeepResearchMode) {
-          // Extract potential search queries from the message
-          const searchQueries = isDeepResearchMode 
-            ? [content, `${content} examples`, `${content} best practices`]
-            : [content];
-          
-          await actions.sendMessageWithSearch(
-            content, 
-            selectedThread._id, 
-            selectedProvider, 
-            selectedModel, 
-            apiKey,
-            searchQueries,
-            attachments,
-            selectedAgentId
-          );
-        } else {
-          // Check if user is trying to search without using /search command
-          const searchKeywords = ['search', 'find', 'look up', 'latest news', 'what is', 'tell me about', 'research'];
-          const hasSearchIntent = searchKeywords.some(keyword => 
-            content.toLowerCase().includes(keyword.toLowerCase())
-          );
-          
-          if (hasSearchIntent && !enableWebSearch && !isDeepResearchMode) {
-            // Add a helpful system message suggesting web search
-            await actions.sendSystemMessage(
-              `💡 **Tip**: It looks like you want to search for information! Try:\n\n` +
-              `• **\`/search ${content}\`** - Search the web for this query\n` +
-              `• **\`/research ${content}\`** - Deep research with multiple queries\n` +
-              `• **Enable "Web Search" toggle** above and ask your question\n\n` +
-              `I'll still try to help with my existing knowledge:`,
-              selectedThread._id
-            );
-          }
-          
-          await actions.sendMessage(
-            content, 
-            selectedThread._id, 
-            selectedProvider, 
-            selectedModel, 
-            apiKey,
-            attachments,
-            selectedAgentId
+        // Regular message - check if user is trying to search without using /search command
+        const searchKeywords = ['search', 'find', 'look up', 'latest news', 'what is', 'tell me about', 'research'];
+        const hasSearchIntent = searchKeywords.some(keyword => 
+          content.toLowerCase().includes(keyword.toLowerCase())
+        );
+        
+        if (hasSearchIntent) {
+          // Add a helpful system message suggesting web search
+          await actions.sendSystemMessage(
+            `💡 **Tip**: It looks like you want to search for information! Try:\n\n` +
+            `• **\`/search ${content}\`** - Search the web for this query\n` +
+            `• **\`/research ${content}\`** - Deep research with multiple queries\n` +
+            `• **Click "Commands" button** above to see all available commands\n\n` +
+            `I'll still try to help with my existing knowledge:`,
+            selectedThread._id
           );
         }
+        
+        await actions.sendMessage(
+          content, 
+          selectedThread._id, 
+          selectedProvider, 
+          selectedModel, 
+          apiKey,
+          attachments,
+          selectedAgentId
+        );
       }
       
       // Clear attachments after sending
@@ -268,47 +265,104 @@ export function ChatView() {
               onSelect={setSelectedAgentId}
             />
             
-            {/* Feature Toggles */}
-            <div className="flex items-center gap-2">
+            {/* Commands Help Dropdown */}
+            <div className="relative" ref={dropdownRef}>
               <Tooltip 
-                content={enableWebSearch ? "Disable web search" : "Enable real-time web search for all messages"}
+                content="View all available slash commands"
                 position="bottom"
                 delay={300}
               >
                 <button
-                  onClick={() => setEnableWebSearch(!enableWebSearch)}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all font-mono ${
-                    enableWebSearch 
-                      ? 'bg-[var(--c3-primary)]/15 text-[var(--c3-primary)] border border-[var(--c3-primary)] shadow-sm' 
-                      : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)] hover:bg-[var(--c3-surface-hover)]'
-                  }`}
-                  aria-label={enableWebSearch ? "Disable web search" : "Enable web search"}
+                  onClick={() => setShowCommandsDropdown(!showCommandsDropdown)}
+                  className="px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all font-mono bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)] hover:bg-[var(--c3-surface-hover)]"
+                  aria-label="Show commands help"
                 >
-                  <Globe className="w-4 h-4" />
-                  <span className="hidden sm:inline">Web Search</span>
-                  {enableWebSearch && <div className="w-2 h-2 bg-[var(--c3-primary)] rounded-full animate-pulse ml-1" />}
+                  <HelpCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Commands</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showCommandsDropdown ? 'rotate-180' : ''}`} />
                 </button>
               </Tooltip>
               
-              <Tooltip 
-                content={isDeepResearchMode ? "Disable deep research" : "Enable deep research mode with multiple search queries and comprehensive analysis"}
-                position="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={() => setIsDeepResearchMode(!isDeepResearchMode)}
-                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm transition-all font-mono ${
-                    isDeepResearchMode 
-                      ? 'bg-[var(--c3-primary)]/15 text-[var(--c3-primary)] border border-[var(--c3-primary)] shadow-sm' 
-                      : 'bg-[var(--c3-surface-primary)] text-[var(--c3-text-secondary)] border border-[var(--c3-border-subtle)] hover:bg-[var(--c3-surface-hover)]'
-                  }`}
-                  aria-label={isDeepResearchMode ? "Disable deep research" : "Enable deep research"}
+              {showCommandsDropdown && (
+                <div 
+                  className="absolute top-full left-0 mt-2 w-80 bg-[var(--c3-surface-primary)] border border-[var(--c3-border-subtle)] rounded-lg shadow-lg z-50 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Brain className="w-4 h-4" />
-                  <span className="hidden sm:inline">Deep Research</span>
-                  {isDeepResearchMode && <div className="w-2 h-2 bg-[var(--c3-primary)] rounded-full animate-pulse ml-1" />}
-                </button>
-              </Tooltip>
+                  <div className="p-3 border-b border-[var(--c3-border-subtle)]">
+                    <h3 className="text-sm font-semibold text-[var(--c3-text-primary)] mb-1">💬 Available Commands</h3>
+                    <p className="text-xs text-[var(--c3-text-tertiary)]">Type these commands in your message to activate special features</p>
+                  </div>
+                  
+                  <div className="max-h-96 overflow-y-auto">
+                    {/* Search Commands */}
+                    <div className="p-3 border-b border-[var(--c3-border-subtle)]">
+                      <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                        <Search className="w-3 h-3" />
+                        Web Search & Research
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/search</code>
+                          <div>
+                            <div className="text-xs text-[var(--c3-text-primary)]">Search the web in real-time</div>
+                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /search latest AI developments 2024</div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/research</code>
+                          <div>
+                            <div className="text-xs text-[var(--c3-text-primary)]">Deep research with multiple queries</div>
+                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /research climate change solutions</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content Generation */}
+                    <div className="p-3 border-b border-[var(--c3-border-subtle)]">
+                      <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                        <Image className="w-3 h-3" />
+                        Content Generation
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/image</code>
+                          <div>
+                            <div className="text-xs text-[var(--c3-text-primary)]">Generate AI images</div>
+                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /image sunset over mountains</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Conversation Management */}
+                    <div className="p-3">
+                      <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        Conversation Tools
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/clear</code>
+                          <div className="text-xs text-[var(--c3-text-primary)]">Clear all messages</div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/branch</code>
+                          <div className="text-xs text-[var(--c3-text-primary)]">Create conversation branch</div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/export</code>
+                          <div className="text-xs text-[var(--c3-text-primary)]">Export conversation</div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/help</code>
+                          <div className="text-xs text-[var(--c3-text-primary)]">Show detailed help</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           
