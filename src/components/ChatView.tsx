@@ -82,7 +82,7 @@ export function ChatView() {
         
         switch (command.toLowerCase()) {
           case "image":
-          case "img":
+          case "img": {
             if (args.length === 0) {
               toast.error("Please provide a prompt for image generation");
               setInput(content);
@@ -91,8 +91,9 @@ export function ChatView() {
             const imagePrompt = args.join(" ");
             await actions.generateImage(imagePrompt, selectedThread._id);
             break;
+          }
             
-          case "search":
+          case "search": {
             if (args.length === 0) {
               toast.error("Please provide a search query");
               setInput(content);
@@ -110,8 +111,9 @@ export function ChatView() {
               selectedAgentId
             );
             break;
+          }
             
-          case "research":
+          case "research": {
             if (args.length === 0) {
               toast.error("Please provide a research topic");
               setInput(content);
@@ -136,6 +138,7 @@ export function ChatView() {
               selectedAgentId
             );
             break;
+          }
             
           case "branch":
             if (actions.createBranch) {
@@ -144,24 +147,40 @@ export function ChatView() {
             }
             break;
             
-          case "export":
+          case "export": {
             const format = args[0] || "markdown";
             if (actions.exportThread) {
               await actions.exportThread(selectedThread._id, format);
               toast.success(`Conversation exported as ${format}`);
             }
             break;
+          }
             
           case "clear":
             await actions.clearThread(selectedThread._id);
             toast.success("Conversation cleared");
             break;
             
-          case "help":
+          case "help": {
             // Show help message with available commands
-            const helpMessage = `Available commands:\n/image <prompt> - Generate an image\n/search <query> - Search the web\n/research <topic> - Deep research mode\n/branch - Create conversation branch\n/export [format] - Export conversation\n/clear - Clear conversation`;
+            const helpMessage = `# 🤖 C3Chat Commands\n\n` +
+              `**🔍 Web Search & Research**\n` +
+              `• \`/search <query>\` - Search the web for current information\n` +
+              `• \`/research <topic>\` - Deep research with multiple search queries\n` +
+              `• Toggle "Web Search" above to enable search for all messages\n\n` +
+              `**🎨 Content Generation**\n` +
+              `• \`/image <prompt>\` - Generate an image with AI\n\n` +
+              `**💬 Conversation Management**\n` +
+              `• \`/branch\` - Create a new conversation branch\n` +
+              `• \`/clear\` - Clear all messages in this thread\n` +
+              `• \`/export [format]\` - Export conversation (markdown/json)\n\n` +
+              `**💡 Examples:**\n` +
+              `• \`/search latest AI developments 2024\`\n` +
+              `• \`/research climate change solutions\`\n` +
+              `• \`/image sunset over mountains\``;
             await actions.sendSystemMessage(helpMessage, selectedThread._id);
             break;
+          }
             
           default:
             toast.error(`Unknown command: /${command}`);
@@ -187,6 +206,24 @@ export function ChatView() {
             selectedAgentId
           );
         } else {
+          // Check if user is trying to search without using /search command
+          const searchKeywords = ['search', 'find', 'look up', 'latest news', 'what is', 'tell me about', 'research'];
+          const hasSearchIntent = searchKeywords.some(keyword => 
+            content.toLowerCase().includes(keyword.toLowerCase())
+          );
+          
+          if (hasSearchIntent && !enableWebSearch && !isDeepResearchMode) {
+            // Add a helpful system message suggesting web search
+            await actions.sendSystemMessage(
+              `💡 **Tip**: It looks like you want to search for information! Try:\n\n` +
+              `• **\`/search ${content}\`** - Search the web for this query\n` +
+              `• **\`/research ${content}\`** - Deep research with multiple queries\n` +
+              `• **Enable "Web Search" toggle** above and ask your question\n\n` +
+              `I'll still try to help with my existing knowledge:`,
+              selectedThread._id
+            );
+          }
+          
           await actions.sendMessage(
             content, 
             selectedThread._id, 
