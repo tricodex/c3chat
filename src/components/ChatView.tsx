@@ -302,17 +302,17 @@ export function ChatView() {
                       </h4>
                       <div className="space-y-2">
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/search</code>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/search</code>
                           <div>
-                            <div className="text-xs text-[var(--c3-text-primary)]">Search the web in real-time</div>
-                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /search latest AI developments 2024</div>
+                            <div className="text-xs text-gray-900 dark:text-gray-100">Search the web in real-time</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">Example: /search latest AI developments 2024</div>
                           </div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/research</code>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/research</code>
                           <div>
-                            <div className="text-xs text-[var(--c3-text-primary)]">Deep research with multiple queries</div>
-                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /research climate change solutions</div>
+                            <div className="text-xs text-black dark:text-gray-100">Deep research with multiple queries</div>
+                            <div className="text-xs text-black dark:text-gray-400">Example: /research climate change solutions</div>
                           </div>
                         </div>
                       </div>
@@ -320,16 +320,16 @@ export function ChatView() {
 
                     {/* Content Generation */}
                     <div className="p-3 border-b border-[var(--c3-border-subtle)]">
-                      <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                      <h4 className="text-xs text-grey-500 font-medium mb-2 flex items-center gap-1">
                         <Image className="w-3 h-3" />
                         Content Generation
                       </h4>
                       <div className="space-y-2">
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/image</code>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/image</code>
                           <div>
-                            <div className="text-xs text-[var(--c3-text-primary)]">Generate AI images</div>
-                            <div className="text-xs text-[var(--c3-text-tertiary)]">Example: /image sunset over mountains</div>
+                            <div className="text-xs text-gray-900 dark:text-gray-100">Generate AI images</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">Example: /image sunset over mountains</div>
                           </div>
                         </div>
                       </div>
@@ -337,26 +337,26 @@ export function ChatView() {
 
                     {/* Conversation Management */}
                     <div className="p-3">
-                      <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                      <h4 className="text-xs font-medium mb-2 flex items-center gap-1">
                         <FileText className="w-3 h-3" />
                         Conversation Tools
                       </h4>
                       <div className="space-y-2">
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/clear</code>
-                          <div className="text-xs text-[var(--c3-text-primary)]">Clear all messages</div>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/clear</code>
+                          <div className="text-xs text-black dark:text-gray-100">Clear all messages</div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/branch</code>
-                          <div className="text-xs text-[var(--c3-text-primary)]">Create conversation branch</div>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/branch</code>
+                          <div className="text-xs text-black dark:text-gray-100">Create conversation branch</div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/export</code>
-                          <div className="text-xs text-[var(--c3-text-primary)]">Export conversation</div>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/export</code>
+                          <div className="text-xs text-black dark:text-gray-100">Export conversation</div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <code className="text-xs bg-[var(--c3-surface-secondary)] px-1.5 py-0.5 rounded font-mono text-[var(--c3-primary)]">/help</code>
-                          <div className="text-xs text-[var(--c3-text-primary)]">Show detailed help</div>
+                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/help</code>
+                          <div className="text-xs text-black dark:text-gray-100">Show detailed help</div>
                         </div>
                       </div>
                     </div>
