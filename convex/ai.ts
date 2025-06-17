@@ -6,6 +6,80 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { StreamBuffer, sanitizeContent, retryWithBackoff } from "./aiUtils";
 
+// Web search interface for TAVILY
+interface WebSearchResult {
+  title: string;
+  url: string;
+  content: string;
+  score?: number;
+}
+
+interface TavilySearchResponse {
+  query: string;
+  follow_up_questions?: string[];
+  answer?: string;
+  images?: any[];
+  results: {
+    title: string;
+    url: string;
+    content: string;
+    score: number;
+  }[];
+}
+
+// Web search function using TAVILY API
+const searchWeb = async (queries: string[], apiKey?: string): Promise<{ query: string; results: WebSearchResult[] }[]> => {
+  const tavilyApiKey = apiKey || process.env.CONVEX_TAVILY_API_KEY;
+  if (!tavilyApiKey) {
+    console.warn("TAVILY_API_KEY not configured, skipping web search");
+    return [];
+  }
+
+  const searchResults: { query: string; results: WebSearchResult[] }[] = [];
+
+  for (const query of queries) {
+    try {
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${tavilyApiKey}`,
+        },
+        body: JSON.stringify({
+          query,
+          search_depth: "basic",
+          include_answer: true,
+          include_images: false,
+          include_raw_content: false,
+          max_results: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`Tavily search failed for query "${query}":`, response.status, response.statusText);
+        continue;
+      }
+
+      const data: TavilySearchResponse = await response.json();
+      
+      const results: WebSearchResult[] = data.results.map(result => ({
+        title: result.title,
+        url: result.url,
+        content: result.content,
+        score: result.score,
+      }));
+
+      searchResults.push({ query, results });
+      
+      console.log(`🔍 Web search completed for "${query}": ${results.length} results`);
+    } catch (error) {
+      console.error(`Error searching web for query "${query}":`, error);
+    }
+  }
+
+  return searchResults;
+};
+
 // Helper to create OpenAI-compatible client for OpenRouter
 const createOpenAIClient = (apiKey: string, baseURL?: string) => {
   return new OpenAI({
@@ -827,15 +901,14 @@ export const sendMessageWithContext = action({
     }))),
   }),
   handler: async (ctx, args) => {
-    // For now, just use sendMessage directly
-    // TODO: Implement web search and knowledge base features
+    // Create user message first
     const userMessageId: Id<"messages"> = await ctx.runMutation(api.messages.create, {
       threadId: args.threadId,
       role: "user",
       content: args.content,
     });
 
-    // Generate AI response using local function
+    // Create assistant message for streaming response
     const assistantMessageId: Id<"messages"> = await ctx.runMutation(api.messages.create, {
       threadId: args.threadId,
       role: "assistant",
@@ -844,18 +917,234 @@ export const sendMessageWithContext = action({
       cursor: true,
     });
 
-    // TODO: Actually implement AI generation here
-    await ctx.runMutation(internal.messages.updateContent, {
-      messageId: assistantMessageId,
-      content: "Web search and knowledge base features are not yet implemented.",
-      isStreaming: false,
-      cursor: false,
-    });
-    
-    return { 
-      success: true, 
-      messageId: userMessageId,
-      searchResults: undefined
-    };
+    try {
+      let searchResults: { query: string; results: WebSearchResult[] }[] = [];
+      let enrichedContent = args.content;
+
+      // Perform web search if enabled
+      if (args.enableWebSearch && args.searchQueries && args.searchQueries.length > 0) {
+        await ctx.runMutation(internal.messages.updateContent, {
+          messageId: assistantMessageId,
+          content: "🔍 Searching the web...",
+          isStreaming: true,
+          cursor: true,
+        });
+
+        searchResults = await searchWeb(args.searchQueries);
+
+        if (searchResults.length > 0) {
+          // Enhance the user's query with search results
+          const searchContext = searchResults
+            .map(searchResult => {
+              const topResults = searchResult.results.slice(0, 3);
+              return `Search for "${searchResult.query}":\n${topResults
+                .map(result => `- ${result.title}: ${result.content.substring(0, 200)}...`)
+                .join('\n')}`;
+            })
+            .join('\n\n');
+
+          enrichedContent = `User question: ${args.content}\n\nWeb search results:\n${searchContext}\n\nPlease provide a comprehensive answer based on the user's question and the search results above.`;
+        }
+      }
+
+      // Update status
+      await ctx.runMutation(internal.messages.updateContent, {
+        messageId: assistantMessageId,
+        content: "💭 Generating response...",
+        isStreaming: true,
+        cursor: true,
+      });
+
+      // Get conversation history for context
+      const messages = await ctx.runQuery(api.messages.list, {
+        threadId: args.threadId,
+      });
+
+      // Filter out the streaming assistant message and build conversation history
+      const conversationHistory = messages
+        .filter((msg: any) => msg._id !== assistantMessageId)
+        .map((msg: any) => ({
+          role: msg.role as "user" | "assistant" | "system",
+          content: msg._id === userMessageId ? enrichedContent : msg.content,
+        }));
+
+      // Add system prompt if provided
+      if (args.systemPrompt) {
+        conversationHistory.unshift({
+          role: "system",
+          content: args.systemPrompt,
+        });
+      }
+
+      // Generate AI response
+      let fullContent = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      switch (args.provider) {
+        case "openai":
+        case "openrouter": {
+          const apiKey = args.apiKey || process.env.CONVEX_OPENAI_API_KEY;
+          if (!apiKey) throw new Error("OpenAI API key required");
+
+          const baseURL = args.provider === "openrouter" 
+            ? "https://openrouter.ai/api/v1" 
+            : process.env.CONVEX_OPENAI_BASE_URL;
+
+          const client = createOpenAIClient(apiKey, baseURL);
+          const streamBuffer = new StreamBuffer();
+
+          const stream = await retryWithBackoff(async () => {
+            return await client.chat.completions.create({
+              model: args.model,
+              messages: conversationHistory,
+              stream: true,
+              ...(args.provider === "openrouter" && {
+                headers: {
+                  "HTTP-Referer": "https://c3chat.app",
+                  "X-Title": "C3Chat",
+                },
+              }),
+            });
+          });
+
+          for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content || "";
+            if (delta) {
+              streamBuffer.add(delta);
+              
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
+            }
+
+            if (chunk.usage) {
+              inputTokens = chunk.usage.prompt_tokens || 0;
+              outputTokens = chunk.usage.completion_tokens || 0;
+            }
+          }
+
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
+          }
+          break;
+        }
+
+        case "google": {
+          const apiKey = args.apiKey || process.env.CONVEX_GOOGLE_API_KEY;
+          if (!apiKey) throw new Error("Google API key required");
+
+          const genAI = new GoogleGenAI({ apiKey });
+
+          const contents = conversationHistory
+            .filter((msg: any) => msg.role !== "system")
+            .map((msg: any) => ({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.content }],
+            }));
+
+          if (args.systemPrompt) {
+            const systemMsg = conversationHistory.find((msg: any) => msg.role === "system");
+            if (systemMsg && contents.length > 0) {
+              contents[0] = {
+                role: "user",
+                parts: [{ text: `System: ${systemMsg.content}\n\nUser: ${contents[0]?.parts[0]?.text || ''}` }],
+              };
+            }
+          }
+
+          const streamBuffer = new StreamBuffer();
+          
+          const stream = await genAI.models.generateContentStream({
+            model: args.model,
+            contents,
+            config: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 8192,
+            },
+          });
+
+          for await (const chunk of stream) {
+            const text = chunk.text;
+            if (text) {
+              streamBuffer.add(text);
+              
+              if (streamBuffer.shouldFlush()) {
+                const bufferedContent = streamBuffer.flush();
+                fullContent += bufferedContent;
+                
+                await ctx.runMutation(internal.messages.updateContent, {
+                  messageId: assistantMessageId,
+                  content: fullContent,
+                  isStreaming: true,
+                  cursor: true,
+                });
+              }
+            }
+          }
+
+          const remaining = streamBuffer.flush();
+          if (remaining) {
+            fullContent += remaining;
+          }
+          break;
+        }
+
+        default:
+          throw new Error(`Unsupported provider: ${args.provider}`);
+      }
+
+      // Finalize the assistant message
+      await ctx.runMutation(internal.messages.updateContent, {
+        messageId: assistantMessageId,
+        content: sanitizeContent(fullContent),
+        isStreaming: false,
+        cursor: false,
+        inputTokens,
+        outputTokens,
+      });
+
+      // Format search results for return
+      const formattedSearchResults = searchResults.map(sr => ({
+        query: sr.query,
+        results: sr.results.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.content.substring(0, 200) + "...",
+        })),
+      }));
+
+      return { 
+        success: true, 
+        messageId: userMessageId,
+        searchResults: formattedSearchResults.length > 0 ? formattedSearchResults : undefined,
+      };
+
+    } catch (error: any) {
+      // Update assistant message with error
+      await ctx.runMutation(internal.messages.updateContent, {
+        messageId: assistantMessageId,
+        content: `Error: ${error.message}`,
+        isStreaming: false,
+        cursor: false,
+      });
+
+      return { 
+        success: false, 
+        messageId: userMessageId,
+        searchResults: undefined,
+      };
+    }
   },
 });

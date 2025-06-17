@@ -441,8 +441,12 @@ interface SyncContextValue {
     updateThread: (threadId: string, updates: Partial<Thread>) => Promise<void>;
     deleteThread: (threadId: string) => Promise<void>;
     sendMessage: (content: string, threadId: string, provider?: string, model?: string, apiKey?: string | null, attachmentIds?: string[], agentId?: string) => Promise<void>;
+    sendMessageWithSearch: (content: string, threadId: string, provider: string, model: string, apiKey?: string, searchQueries?: string[], attachmentIds?: Id<"attachments">[], agentId?: string) => Promise<void>;
     updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
     deleteMessage: (messageId: string) => Promise<void>;
+    generateImage: (prompt: string, threadId: string, provider?: string, apiKey?: string) => Promise<void>;
+    clearThread: (threadId: string) => Promise<void>;
+    sendSystemMessage: (content: string, threadId: string) => Promise<void>;
     createBranch: (threadId: string, messageId?: string) => Promise<string>;
     shareThread: (threadId: string) => Promise<string>;
     exportThread?: (threadId: string, format: string) => Promise<void>;
@@ -1472,6 +1476,221 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     clearError: () => {
       dispatch({ type: 'SET_ERROR', payload: null });
+    },
+
+    sendMessageWithSearch: async (content: string, threadId: string, provider: string, model: string, apiKey?: string, searchQueries?: string[], attachmentIds?: Id<"attachments">[], agentId?: string) => {
+      if (!localDB.current) throw new Error('Local cache not initialized');
+      
+      // Create optimistic user message
+      const userOptimisticId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'user',
+        content,
+        isOptimistic: true,
+        localCreatedAt: Date.now(),
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Create optimistic assistant message
+      const assistantOptimisticId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'assistant',
+        content: "Searching the web and generating response...",
+        isStreaming: true,
+        cursor: true,
+        isOptimistic: true,
+        localCreatedAt: Date.now() + 1,
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
+      
+      if (!state.isOnline) {
+        const operation: PendingOperation = {
+          id: nanoid(),
+          type: 'create_message',
+          data: { 
+            threadId: threadId as Id<"threads">, 
+            content, 
+            provider,
+            model,
+            apiKey,
+            attachmentIds,
+            agentId,
+            enableWebSearch: true,
+            searchQueries 
+          },
+          timestamp: Date.now(),
+          retryCount: 0,
+          optimisticId: userOptimisticId,
+        };
+        
+        dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
+        return;
+      }
+
+      try {
+        const systemPrompt = agentId ? getAgentSystemPrompt(agentId) : undefined;
+        
+        await sendMessageWithContext({
+          threadId: threadId as Id<"threads">,
+          content,
+          provider,
+          model,
+          apiKey: apiKey || undefined,
+          attachmentIds,
+          systemPrompt,
+          enableWebSearch: true,
+          searchQueries,
+        });
+
+        // Remove optimistic messages - they'll be replaced by real ones from Convex
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+      } catch (error) {
+        console.error('❌ Failed to send message with search:', error);
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+        throw error;
+      }
+    },
+
+    generateImage: async (prompt: string, threadId: string, provider?: string, apiKey?: string) => {
+      if (!localDB.current) throw new Error('Local cache not initialized');
+      
+      // Create optimistic user message
+      const userOptimisticId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'user',
+        content: `/image ${prompt}`,
+        isOptimistic: true,
+        localCreatedAt: Date.now(),
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Create optimistic assistant message
+      const assistantOptimisticId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'assistant',
+        content: "Generating image...",
+        isStreaming: true,
+        isOptimistic: true,
+        localCreatedAt: Date.now() + 1,
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
+
+      if (!state.isOnline) {
+        const operation: PendingOperation = {
+          id: nanoid(),
+          type: 'create_message',
+          data: { 
+            threadId: threadId as Id<"threads">, 
+            prompt,
+            provider: provider || 'openai',
+            apiKey,
+            isImageGeneration: true
+          },
+          timestamp: Date.now(),
+          retryCount: 0,
+          optimisticId: userOptimisticId,
+        };
+        
+        dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
+        return;
+      }
+
+      try {
+        await generateImageAction({
+          threadId: threadId as Id<"threads">,
+          prompt,
+          provider: provider || 'openai',
+          apiKey: apiKey || undefined,
+        });
+
+        // Remove optimistic messages - they'll be replaced by real ones from Convex
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+      } catch (error) {
+        console.error('❌ Failed to generate image:', error);
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+        throw error;
+      }
+    },
+
+    clearThread: async (threadId: string) => {
+      // Clear messages from the UI
+      dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: threadId });
+      
+      // Clear from local DB by deleting all messages for this thread
+      if (localDB.current) {
+        const messages = await localDB.current.getMessages(threadId);
+        for (const message of messages) {
+          await localDB.current.deleteMessage(message._id);
+        }
+      }
+
+      if (!state.isOnline) {
+        const operation: PendingOperation = {
+          id: nanoid(),
+          type: 'delete_message',
+          data: { threadId: threadId as Id<"threads">, clearAll: true },
+          timestamp: Date.now(),
+          retryCount: 0,
+        };
+        
+        dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
+        return;
+      }
+
+      try {
+        // Note: This would need a new convex function to clear all messages in a thread
+        // For now, we'll just clear locally
+        console.log('🧹 Thread messages cleared locally');
+      } catch (error) {
+        console.error('❌ Failed to clear thread:', error);
+        throw error;
+      }
+    },
+
+    sendSystemMessage: async (content: string, threadId: string) => {
+      // System messages are just rendered locally, not sent to server
+      const systemMessageId = `temp_system_${nanoid()}` as Id<"messages">;
+      const systemMessage: Message = {
+        _id: systemMessageId,
+        threadId: threadId as Id<"threads">,
+        role: "assistant",
+        content,
+        localCreatedAt: Date.now(),
+        isOptimistic: true,
+        syncedToServer: false,
+        _version: 1,
+      };
+
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: systemMessage });
+      
+      // Save to local DB
+      if (localDB.current) {
+        await localDB.current.saveMessage(systemMessage);
+      }
     },
   }), [state, localDB, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, regenerateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction]);
 
