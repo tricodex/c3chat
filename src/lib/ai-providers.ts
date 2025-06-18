@@ -119,6 +119,73 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         pricing: { inputPer1M: 1.25, outputPer1M: 5 },
         strengths: ["Long context", "Multimodal", "Code generation"],
       },
+      // FREE MODELS
+      {
+        id: "meta-llama/llama-3.3-70b-instruct:free",
+        name: "Llama 3.3 70B (Free)",
+        contextLength: 128000,
+        description: "Meta's latest Llama model - FREE with rate limits",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "General purpose", "Instruction following"],
+        recommended: true,
+      },
+      {
+        id: "google/gemini-2.0-flash-exp:free",
+        name: "Gemini 2.0 Flash (Free)",
+        contextLength: 1000000,
+        description: "Google's experimental flash model - FREE",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Fast", "Long context"],
+      },
+      {
+        id: "deepseek/deepseek-chat-v3-0324:free",
+        name: "DeepSeek Chat V3 (Free)",
+        contextLength: 64000,
+        description: "Excellent for coding tasks - FREE",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Coding", "Reasoning"],
+        recommended: true,
+      },
+      {
+        id: "deepseek/deepseek-r1:free",
+        name: "DeepSeek R1 (Free)",
+        contextLength: 64000,
+        description: "DeepSeek's reasoning model - FREE",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Reasoning", "Problem solving"],
+      },
+      {
+        id: "qwen/qwq-32b:free",
+        name: "QWQ 32B (Free)",
+        contextLength: 32768,
+        description: "Qwen's reasoning model - FREE",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Reasoning", "Math"],
+      },
+      {
+        id: "meta-llama/llama-3.1-8b-instruct:free",
+        name: "Llama 3.1 8B (Free)",
+        contextLength: 128000,
+        description: "Smaller Llama model - FREE, faster responses",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Fast", "Basic tasks"],
+      },
+      {
+        id: "google/gemma-3-27b-it:free",
+        name: "Gemma 3 27B (Free)",
+        contextLength: 8192,
+        description: "Google's Gemma model - FREE",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Efficient", "General purpose"],
+      },
+      {
+        id: "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
+        name: "Nemotron Ultra 253B (Free)",
+        contextLength: 128000,
+        description: "NVIDIA's massive model - FREE with limits",
+        pricing: { inputPer1M: 0, outputPer1M: 0 },
+        strengths: ["Free", "Large scale", "Complex tasks"],
+      },
     ],
   },
 
@@ -621,6 +688,9 @@ export function compareModels(modelA: AIModel, modelB: AIModel) {
 // Format pricing for display
 export function formatPricing(pricing?: { inputPer1M: number; outputPer1M: number }): string {
   if (!pricing) return "Pricing varies";
+  if (pricing.inputPer1M === 0 && pricing.outputPer1M === 0) {
+    return "🎉 FREE (rate limited)";
+  }
   return `$${pricing.inputPer1M}/1M in • $${pricing.outputPer1M}/1M out`;
 }
 
