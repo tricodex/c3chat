@@ -32,6 +32,10 @@ import { createLocalDB, LocalDB, StoredThread, StoredMessage } from './local-db'
 import { nanoid } from 'nanoid';
 import { getAgentSystemPrompt, getAgentTemperature } from './ai-agents';
 
+// Default AI provider configuration
+const DEFAULT_PROVIDER = "google";
+const DEFAULT_MODEL = "gemini-2.0-flash";
+
 // Enhanced Types with version tracking
 interface Thread extends StoredThread {
   isOptimistic?: boolean;
@@ -733,8 +737,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
               await generateResponseAction({
                 threadId: operation.data.threadId,
                 content: operation.data.content,
-                provider: operation.data.provider || 'openai',
-                model: operation.data.model || 'gpt-4o-mini',
+                provider: operation.data.provider || DEFAULT_PROVIDER,
+                model: operation.data.model || DEFAULT_MODEL,
                 apiKey: operation.data.apiKey,
                 attachmentIds: operation.data.attachmentIds,
                 systemPrompt: operation.data.agentId ? getAgentSystemPrompt(operation.data.agentId) : undefined,
@@ -1035,7 +1039,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     },
 
-    createThread: async (title?: string, provider = "openai", model = "gpt-4o-mini"): Promise<string> => {
+    createThread: async (title?: string, provider = DEFAULT_PROVIDER, model = DEFAULT_MODEL): Promise<string> => {
       if (!localDB.current) throw new Error('Local cache not initialized');
 
       // Generate auto title if not provided
