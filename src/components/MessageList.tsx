@@ -5,6 +5,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock, Cpu, MessageSquare, Search, Braces } from "lucide-react";
 import { MessageActions } from "./MessageActions";
 import { MessageEdit } from "./MessageEdit";
+import { AttachmentViewer } from "./AttachmentViewer";
 
 interface MessageListProps {
   messages: Message[];
@@ -158,9 +159,36 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
                     />
                   </div>
                 )}
+                
+                {/* Generated Video */}
+                {message.generatedVideoUrl && (
+                  <div className="mt-3">
+                    <video 
+                      src={message.generatedVideoUrl} 
+                      controls
+                      className="rounded-lg max-w-full shadow-lg"
+                      style={{ maxHeight: '400px' }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                )}
               </>
             ) : (
               <div className="whitespace-pre-wrap" style={{ color: 'var(--c3-msg-user-text)' }}>{message.content}</div>
+            )}
+            
+            {/* Attachments */}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {message.attachments.map((attachment) => (
+                  <AttachmentViewer
+                    key={attachment._id}
+                    attachment={attachment}
+                    variant="compact"
+                  />
+                ))}
+              </div>
             )}
             
             {/* Message Actions */}

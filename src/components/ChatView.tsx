@@ -10,7 +10,7 @@ import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Trash2, FileText } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Video, Trash2, FileText } from "lucide-react";
 import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
@@ -128,7 +128,37 @@ export function ChatView() {
               return;
             }
             const imagePrompt = args.join(" ");
-            await actions.generateImage(imagePrompt, selectedThread._id);
+            
+            // Check if current provider supports image generation
+            const provider = AI_PROVIDERS[selectedProvider];
+            if (!provider?.supportsMediaGeneration) {
+              toast.error(`${provider?.name || selectedProvider} doesn't support image generation. Use Google Gemini with Imagen models.`);
+              setInput(content);
+              return;
+            }
+            
+            await actions.generateImage(imagePrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
+            break;
+          }
+          
+          case "video":
+          case "vid": {
+            if (args.length === 0) {
+              toast.error("Please provide a prompt for video generation");
+              setInput(content);
+              return;
+            }
+            const videoPrompt = args.join(" ");
+            
+            // Check if current provider supports video generation
+            const provider = AI_PROVIDERS[selectedProvider];
+            if (!provider?.supportsMediaGeneration) {
+              toast.error(`${provider?.name || selectedProvider} doesn't support video generation. Use Google Gemini with Veo models.`);
+              setInput(content);
+              return;
+            }
+            
+            await actions.generateVideo(videoPrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
             break;
           }
             
@@ -208,7 +238,8 @@ export function ChatView() {
               `• \`/research <topic>\` - Deep research with multiple search queries\n` +
               `• Toggle "Web Search" above to enable search for all messages\n\n` +
               `**🎨 Content Generation**\n` +
-              `• \`/image <prompt>\` - Generate an image with AI\n\n` +
+              `• \`/image <prompt>\` - Generate an image with AI (Gemini Imagen)\n` +
+              `• \`/video <prompt>\` - Generate a video with AI (Gemini Veo)\n\n` +
               `**💬 Conversation Management**\n` +
               `• \`/branch\` - Create a new conversation branch\n` +
               `• \`/clear\` - Clear all messages in this thread\n` +
@@ -341,22 +372,31 @@ export function ChatView() {
                       </div>
                     </div>
 
-                    {/* Content Generation */}
-                    <div className="p-3 border-b border-[var(--c3-border-subtle)]">
-                      <h4 className="text-xs text-grey-500 font-medium mb-2 flex items-center gap-1">
-                        <Image className="w-3 h-3" />
-                        Content Generation
-                      </h4>
-                      <div className="space-y-2">
-                        <div className="flex items-start gap-2">
-                          <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/image</code>
-                          <div>
-                            <div className="text-xs text-gray-900 dark:text-gray-100">Generate AI images</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">Example: /image sunset over mountains</div>
+                    {/* Content Generation - Only show if provider supports it */}
+                    {AI_PROVIDERS[selectedProvider]?.supportsMediaGeneration && (
+                      <div className="p-3 border-b border-[var(--c3-border-subtle)]">
+                        <h4 className="text-xs text-grey-500 font-medium mb-2 flex items-center gap-1">
+                          <Image className="w-3 h-3" />
+                          Content Generation
+                        </h4>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/image</code>
+                            <div>
+                              <div className="text-xs text-gray-900 dark:text-gray-100">Generate AI images (Imagen)</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Example: /image sunset over mountains</div>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/video</code>
+                            <div>
+                              <div className="text-xs text-gray-900 dark:text-gray-100">Generate AI videos (Veo)</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Example: /video waves crashing on beach</div>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Conversation Management */}
                     <div className="p-3">

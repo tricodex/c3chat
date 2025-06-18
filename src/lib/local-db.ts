@@ -40,6 +40,7 @@ export interface StoredMessage {
   inputTokens?: number;
   outputTokens?: number;
   generatedImageUrl?: string;
+  generatedVideoUrl?: string;
   isOptimistic?: boolean;
   localCreatedAt?: number;
   syncedToServer?: boolean;

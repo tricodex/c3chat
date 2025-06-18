@@ -29,7 +29,7 @@ import {
   Meta,
   Perplexity
 } from '@lobehub/icons';
-import { ChevronDown, Check, Search, Sparkles, Zap, Globe, Code, Brain, Image, Key, ExternalLink } from 'lucide-react';
+import { ChevronDown, Check, Search, Sparkles, Zap, Globe, Code, Brain, Image, Key, ExternalLink, Video, Palette } from 'lucide-react';
 
 // Professional AI Provider Logo Component using @lobehub/icons
 function ProviderLogo({ providerId, name, size = 20 }: { providerId?: string; name: string; size?: number }) {
@@ -420,6 +420,18 @@ function ElaborateDropdown({
                       <span className="font-medium text-sm text-[var(--c3-text-primary)]">
                         {model.name}
                       </span>
+                      {model.type === 'image' && (
+                        <div className="flex items-center gap-1 text-xs text-[var(--c3-text-muted)]">
+                          <Image className="w-3 h-3" />
+                          <span>Image</span>
+                        </div>
+                      )}
+                      {model.type === 'video' && (
+                        <div className="flex items-center gap-1 text-xs text-[var(--c3-text-muted)]">
+                          <Video className="w-3 h-3" />
+                          <span>Video</span>
+                        </div>
+                      )}
                       {model.recommended && <Sparkles className="w-3 h-3 text-[var(--c3-warning)]" />}
                     </div>
                     {model.description && (
@@ -486,6 +498,7 @@ function ElaborateDropdown({
                     {provider.supportsImages && <Image className="w-3 h-3 text-[var(--c3-text-muted)]" />}
                     {provider.supportsTools && <Code className="w-3 h-3 text-[var(--c3-text-muted)]" />}
                     {provider.supportsWebSearch && <Globe className="w-3 h-3 text-[var(--c3-text-muted)]" />}
+                    {provider.supportsMediaGeneration && <Palette className="w-3 h-3 text-[var(--c3-text-muted)]" />}
                   </div>
                 </div>
 
@@ -588,6 +601,12 @@ function ProviderCard({
                   <span>Search</span>
                 </div>
               )}
+              {provider.supportsMediaGeneration && (
+                <div className="flex items-center gap-1 text-xs text-[var(--c3-text-muted)]">
+                  <Palette className="w-3 h-3" />
+                  <span>Media</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -630,6 +649,18 @@ function ProviderCard({
                     <span className="font-medium text-[var(--c3-text-primary)]">
                       {model.name}
                     </span>
+                    {model.type === 'image' && (
+                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-primary)]/10 text-[var(--c3-primary)] rounded-full flex items-center gap-1">
+                        <Image className="w-3 h-3" />
+                        Image Gen
+                      </span>
+                    )}
+                    {model.type === 'video' && (
+                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-electric)]/10 text-[var(--c3-electric)] rounded-full flex items-center gap-1">
+                        <Video className="w-3 h-3" />
+                        Video Gen
+                      </span>
+                    )}
                     {model.recommended && (
                       <span className="text-xs px-2 py-0.5 bg-[var(--c3-warning)]/10 text-[var(--c3-warning)] rounded-full flex items-center gap-1">
                         <Sparkles className="w-3 h-3" />

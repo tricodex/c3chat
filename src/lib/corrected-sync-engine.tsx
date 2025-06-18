@@ -987,7 +987,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Advanced actions from AI module
   const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
-  const generateImageAction = useAction(api.ai.generateImage);
+  const generateImageAction = useAction(api["ai-media"].generateImage);
+  const generateVideoAction = useAction(api["ai-media"].generateVideo);
   const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   
   // Thread actions
@@ -1567,7 +1568,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     },
 
-    generateImage: async (prompt: string, threadId: string, provider?: string, apiKey?: string) => {
+    generateImage: async (prompt: string, threadId: string, provider?: string, model?: string, apiKey?: string) => {
       if (!localDB.current) throw new Error('Local cache not initialized');
       
       // Create optimistic user message
@@ -1625,7 +1626,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         await generateImageAction({
           threadId: threadId as Id<"threads">,
           prompt,
-          provider: provider || 'openai',
+          provider: provider || 'google',
+          model: model || 'imagen-3',
           apiKey: apiKey || undefined,
         });
 
@@ -1634,6 +1636,81 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
       } catch (error) {
         console.error('❌ Failed to generate image:', error);
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+        throw error;
+      }
+    },
+
+    generateVideo: async (prompt: string, threadId: string, provider?: string, model?: string, apiKey?: string) => {
+      if (!localDB.current) throw new Error('Local cache not initialized');
+      
+      // Create optimistic user message
+      const userOptimisticId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'user',
+        content: `/video ${prompt}`,
+        isOptimistic: true,
+        localCreatedAt: Date.now(),
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Create optimistic assistant message
+      const assistantOptimisticId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'assistant',
+        content: "Generating video...",
+        isStreaming: true,
+        isOptimistic: true,
+        localCreatedAt: Date.now() + 1,
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: userMessage });
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: assistantMessage });
+
+      if (!state.isOnline) {
+        const operation: PendingOperation = {
+          id: nanoid(),
+          type: 'create_message',
+          data: { 
+            threadId: threadId as Id<"threads">, 
+            prompt,
+            provider: provider || 'google',
+            model: model || 'veo-2',
+            apiKey,
+            isVideoGeneration: true
+          },
+          timestamp: Date.now(),
+          retryCount: 0,
+          optimisticId: userOptimisticId,
+        };
+        
+        dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
+        return;
+      }
+
+      try {
+        await generateVideoAction({
+          threadId: threadId as Id<"threads">,
+          prompt,
+          provider: provider || 'google',
+          model: model || 'veo-2',
+          apiKey: apiKey || undefined,
+        });
+
+        // Remove optimistic messages - they'll be replaced by real ones from Convex
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+      } catch (error) {
+        console.error('❌ Failed to generate video:', error);
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
         throw error;
@@ -1696,7 +1773,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         await localDB.current.saveMessage(systemMessage);
       }
     },
-  }), [state, localDB, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, regenerateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction]);
+  }), [state, localDB, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, generateImageAction, generateVideoAction, regenerateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction, sendMessageWithContext]);
 
   const value: SyncContextValue = {
     state,

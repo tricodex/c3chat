@@ -24,20 +24,47 @@ export const list = query({
       .order("asc")
       .collect();
 
+    // Fetch attachments for each message
+    const messagesWithAttachments = await Promise.all(
+      messages.map(async (message) => {
+        const attachments = await ctx.db
+          .query("attachments")
+          .withIndex("by_message", (q) => q.eq("messageId", message._id))
+          .collect();
+        
+        // Get URLs for each attachment
+        const attachmentsWithUrls = await Promise.all(
+          attachments.map(async (attachment) => {
+            const url = await ctx.storage.getUrl(attachment.storageId);
+            return {
+              ...attachment,
+              url,
+            };
+          })
+        );
+        
+        return {
+          ...message,
+          attachments: attachmentsWithUrls,
+        };
+      })
+    );
+
     console.log("📨 Messages query for thread:", {
       threadId: args.threadId,
-      messageCount: messages.length,
-      messages: messages.map(m => ({
+      messageCount: messagesWithAttachments.length,
+      messages: messagesWithAttachments.map(m => ({
         id: m._id,
         role: m.role,
         contentLength: m.content?.length || 0,
         isStreaming: m.isStreaming,
         cursor: m.cursor,
-        contentPreview: m.content ? m.content.substring(0, 30) + '...' : '[empty]'
+        contentPreview: m.content ? m.content.substring(0, 30) + '...' : '[empty]',
+        attachmentCount: m.attachments?.length || 0
       }))
     });
 
-    return messages;
+    return messagesWithAttachments;
   },
 });
 
@@ -124,6 +151,7 @@ export const updateContent = internalMutation({
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
     generatedImageUrl: v.optional(v.string()),
+    generatedVideoUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     console.log("📝 Updating message content:", {
@@ -143,6 +171,7 @@ export const updateContent = internalMutation({
     if (args.inputTokens !== undefined) updates.inputTokens = args.inputTokens;
     if (args.outputTokens !== undefined) updates.outputTokens = args.outputTokens;
     if (args.generatedImageUrl !== undefined) updates.generatedImageUrl = args.generatedImageUrl;
+    if (args.generatedVideoUrl !== undefined) updates.generatedVideoUrl = args.generatedVideoUrl;
     
     await ctx.db.patch(args.messageId, updates);
     

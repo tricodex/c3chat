@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as ai_media from "../ai-media.js";
 import type * as ai from "../ai.js";
 import type * as aiUtils from "../aiUtils.js";
 import type * as analytics from "../analytics.js";
@@ -39,6 +40,7 @@ import type * as utils_streamBuffer from "../utils/streamBuffer.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  "ai-media": typeof ai_media;
   ai: typeof ai;
   aiUtils: typeof aiUtils;
   analytics: typeof analytics;

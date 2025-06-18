@@ -10,6 +10,7 @@ export interface AIProvider {
   supportsTools?: boolean;
   supportsImages?: boolean;
   supportsWebSearch?: boolean;
+  supportsMediaGeneration?: boolean; // For image/video generation
   websiteUrl?: string;
   apiKeysUrl?: string;
   freeTier?: boolean;
@@ -30,6 +31,8 @@ export interface AIModel {
   strengths?: string[];
   recommended?: boolean;
   maxOutputTokens?: number;
+  type?: 'text' | 'image' | 'video'; // Media generation type
+  capabilities?: string[]; // Specific capabilities like "text-to-image", "text-to-video"
 }
 
 // Company Logo identifiers for simple string-based rendering
@@ -284,13 +287,14 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
   google: {
     id: "google",
     name: "Google Gemini",
-    description: "Google's multimodal AI with massive context windows",
+    description: "Google's multimodal AI with massive context windows and media generation",
     baseURL: "https://generativelanguage.googleapis.com/v1",
     requiresApiKey: true,
     supportsStreaming: true,
     supportsTools: true,
     supportsImages: true,
     supportsWebSearch: false,
+    supportsMediaGeneration: true, // New flag for media generation
     websiteUrl: "https://ai.google.dev",
     apiKeysUrl: "https://makersuite.google.com/app/apikey",
     freeTier: true,
@@ -345,6 +349,41 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
         strengths: ["Long context", "Multimodal", "Analysis"],
         recommended: false,
         maxOutputTokens: 8192,
+      },
+      {
+        id: "imagen-3",
+        name: "Imagen 3",
+        contextLength: 1024,
+        description: "Google's latest text-to-image generation model",
+        pricing: { inputPer1M: 0.02, outputPer1M: 0.02 }, // Per image pricing
+        strengths: ["High quality", "Photorealistic", "Artistic styles"],
+        recommended: true,
+        type: "image",
+        capabilities: ["text-to-image", "image-editing"],
+        maxOutputTokens: 0,
+      },
+      {
+        id: "imagen-2",
+        name: "Imagen 2",
+        contextLength: 1024,
+        description: "Previous generation image model",
+        pricing: { inputPer1M: 0.02, outputPer1M: 0.02 },
+        strengths: ["Quality", "Speed", "Reliability"],
+        type: "image",
+        capabilities: ["text-to-image"],
+        maxOutputTokens: 0,
+      },
+      {
+        id: "veo-2",
+        name: "Veo 2",
+        contextLength: 2048,
+        description: "Google's advanced text-to-video generation model",
+        pricing: { inputPer1M: 0.05, outputPer1M: 0.05 }, // Per video pricing
+        strengths: ["High resolution", "Smooth motion", "Long videos"],
+        recommended: true,
+        type: "video",
+        capabilities: ["text-to-video"],
+        maxOutputTokens: 0,
       },
     ],
   },

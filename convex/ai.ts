@@ -6,6 +6,21 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { StreamBuffer, sanitizeContent, retryWithBackoff } from "./aiUtils";
 
+
+// Helper function to fetch image as base64
+async function fetchImageAsBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const buffer = await blob.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    return base64;
+  } catch (error) {
+    console.error('Failed to fetch image:', error);
+    throw error;
+  }
+}
+
 // Web search interface for TAVILY
 interface WebSearchResult {
   title: string;
@@ -125,18 +140,78 @@ export const generateResponse = action({
     });
 
     try {
-      // Get conversation history
+      // Get conversation history with attachments
       const messages = await ctx.runQuery(api.messages.list, {
         threadId: args.threadId,
       });
 
       // Convert to provider format (exclude the streaming message we just created)
-      const conversationHistory = messages
-        .filter((msg: any) => msg._id !== assistantMessageId)
-        .map((msg: any) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-        }));
+      const conversationHistory = await Promise.all(
+        messages
+          .filter((msg: any) => msg._id !== assistantMessageId)
+          .map(async (msg: any) => {
+            // For messages with attachments, we need to format them differently for multimodal models
+            if (msg.attachments && msg.attachments.length > 0 && args.provider === "google") {
+              // For Google Gemini, format with parts array for multimodal
+              const parts: any[] = [];
+              
+              // Add text content first
+              if (msg.content) {
+                parts.push({ text: msg.content });
+              }
+              
+              // Add image attachments
+              for (const attachment of msg.attachments) {
+                if (attachment.contentType.startsWith('image/')) {
+                  try {
+                    // Fetch image data as base64 for Gemini
+                    const base64Data = await fetchImageAsBase64(attachment.url);
+                    parts.push({
+                      inlineData: {
+                        mimeType: attachment.contentType,
+                        data: base64Data
+                      }
+                    });
+                  } catch (error) {
+                    console.error('Failed to process image attachment:', error);
+                    // Fall back to text description
+                    parts.push({ text: `\n[Image attached: ${attachment.filename} - failed to load]\n` });
+                  }
+                } else if (attachment.extractedText) {
+                  // For PDFs and documents, add extracted text
+                  parts.push({ text: `\n[Attached ${attachment.filename}]:\n${attachment.extractedText}\n` });
+                }
+              }
+              
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                parts,
+              };
+            } else if (msg.attachments && msg.attachments.length > 0) {
+              // For other providers, append attachment info to content
+              let enhancedContent = msg.content;
+              
+              for (const attachment of msg.attachments) {
+                if (attachment.extractedText) {
+                  enhancedContent += `\n\n[Attached ${attachment.filename}]:\n${attachment.extractedText}`;
+                } else if (attachment.contentType.startsWith('image/')) {
+                  enhancedContent += `\n\n[Image attached: ${attachment.filename}]`;
+                }
+              }
+              
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                content: enhancedContent,
+              };
+            } else {
+              // No attachments, return as is
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                content: msg.content,
+              };
+            }
+          })
+      );
 
       // Add system prompt if provided
       if (args.systemPrompt) {
@@ -165,10 +240,32 @@ export const generateResponse = action({
           
           const streamBuffer = new StreamBuffer();
           
+          // Format messages for OpenAI vision models if needed
+          const openAIMessages = conversationHistory.map((msg: any) => {
+            if (msg.parts && args.model.includes('vision')) {
+              // Convert multimodal format to OpenAI format
+              const content: any[] = [];
+              for (const part of msg.parts) {
+                if (part.text) {
+                  content.push({ type: 'text', text: part.text });
+                } else if (part.inlineData) {
+                  content.push({
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+                    }
+                  });
+                }
+              }
+              return { role: msg.role, content };
+            }
+            return msg;
+          });
+
           const stream = await retryWithBackoff(async () => {
             return await client.chat.completions.create({
               model: args.model,
-              messages: conversationHistory,
+              messages: openAIMessages,
               stream: true,
               ...(args.provider === "openrouter" && {
                 headers: {
@@ -223,21 +320,41 @@ export const generateResponse = action({
           // Convert conversation history to Google AI format
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system") // Filter out system messages
-            .map((msg: any) => ({
-              role: msg.role === "assistant" ? "model" : "user",
-              parts: [{ text: msg.content }],
-            }));
+            .map((msg: any) => {
+              // If message already has parts (multimodal), use them
+              if (msg.parts) {
+                return {
+                  role: msg.role === "assistant" ? "model" : "user",
+                  parts: msg.parts,
+                };
+              }
+              // Otherwise, create text part
+              return {
+                role: msg.role === "assistant" ? "model" : "user",
+                parts: [{ text: msg.content }],
+              };
+            });
 
           // Add system prompt as first user message if provided
           if (args.systemPrompt) {
             const systemMsg = conversationHistory.find((msg: any) => msg.role === "system");
             if (systemMsg || args.systemPrompt) {
-              contents.unshift({
-                role: "user",
-                parts: [{ text: `System: ${systemMsg?.content || args.systemPrompt}\n\nUser: ${contents[0]?.parts[0]?.text || ''}` }],
-              });
-              if (contents.length > 1) {
-                contents.splice(1, 1); // Remove the duplicate first user message
+              const firstUserMsg = contents[0];
+              if (firstUserMsg && firstUserMsg.role === "user") {
+                // Prepend system prompt to first user message
+                const systemText = `System: ${systemMsg?.content || args.systemPrompt}\n\nUser: `;
+                if (firstUserMsg.parts[0] && firstUserMsg.parts[0].text) {
+                  firstUserMsg.parts[0].text = systemText + firstUserMsg.parts[0].text;
+                } else {
+                  // If first part isn't text, add system prompt as first part
+                  firstUserMsg.parts.unshift({ text: systemText });
+                }
+              } else {
+                // No user messages, create one with system prompt
+                contents.unshift({
+                  role: "user",
+                  parts: [{ text: `System: ${systemMsg?.content || args.systemPrompt}` }],
+                });
               }
             }
           }
@@ -369,18 +486,78 @@ export const sendMessage = action({
     });
 
     try {
-      // Get conversation history
+      // Get conversation history with attachments
       const messages = await ctx.runQuery(api.messages.list, {
         threadId: args.threadId,
       });
 
       // Convert to provider format (exclude the streaming message we just created)
-      const conversationHistory = messages
-        .filter((msg: any) => msg._id !== assistantMessageId)
-        .map((msg: any) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-        }));
+      const conversationHistory = await Promise.all(
+        messages
+          .filter((msg: any) => msg._id !== assistantMessageId)
+          .map(async (msg: any) => {
+            // For messages with attachments, we need to format them differently for multimodal models
+            if (msg.attachments && msg.attachments.length > 0 && args.provider === "google") {
+              // For Google Gemini, format with parts array for multimodal
+              const parts: any[] = [];
+              
+              // Add text content first
+              if (msg.content) {
+                parts.push({ text: msg.content });
+              }
+              
+              // Add image attachments
+              for (const attachment of msg.attachments) {
+                if (attachment.contentType.startsWith('image/')) {
+                  try {
+                    // Fetch image data as base64 for Gemini
+                    const base64Data = await fetchImageAsBase64(attachment.url);
+                    parts.push({
+                      inlineData: {
+                        mimeType: attachment.contentType,
+                        data: base64Data
+                      }
+                    });
+                  } catch (error) {
+                    console.error('Failed to process image attachment:', error);
+                    // Fall back to text description
+                    parts.push({ text: `\n[Image attached: ${attachment.filename} - failed to load]\n` });
+                  }
+                } else if (attachment.extractedText) {
+                  // For PDFs and documents, add extracted text
+                  parts.push({ text: `\n[Attached ${attachment.filename}]:\n${attachment.extractedText}\n` });
+                }
+              }
+              
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                parts,
+              };
+            } else if (msg.attachments && msg.attachments.length > 0) {
+              // For other providers, append attachment info to content
+              let enhancedContent = msg.content;
+              
+              for (const attachment of msg.attachments) {
+                if (attachment.extractedText) {
+                  enhancedContent += `\n\n[Attached ${attachment.filename}]:\n${attachment.extractedText}`;
+                } else if (attachment.contentType.startsWith('image/')) {
+                  enhancedContent += `\n\n[Image attached: ${attachment.filename}]`;
+                }
+              }
+              
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                content: enhancedContent,
+              };
+            } else {
+              // No attachments, return as is
+              return {
+                role: msg.role as "user" | "assistant" | "system",
+                content: msg.content,
+              };
+            }
+          })
+      );
 
       // Add system prompt if provided
       if (args.systemPrompt) {
@@ -409,10 +586,32 @@ export const sendMessage = action({
           
           const streamBuffer = new StreamBuffer();
           
+          // Format messages for OpenAI vision models if needed
+          const openAIMessages = conversationHistory.map((msg: any) => {
+            if (msg.parts && args.model.includes('vision')) {
+              // Convert multimodal format to OpenAI format
+              const content: any[] = [];
+              for (const part of msg.parts) {
+                if (part.text) {
+                  content.push({ type: 'text', text: part.text });
+                } else if (part.inlineData) {
+                  content.push({
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+                    }
+                  });
+                }
+              }
+              return { role: msg.role, content };
+            }
+            return msg;
+          });
+
           const stream = await retryWithBackoff(async () => {
             return await client.chat.completions.create({
               model: args.model,
-              messages: conversationHistory,
+              messages: openAIMessages,
               stream: true,
               ...(args.provider === "openrouter" && {
                 headers: {
@@ -467,21 +666,41 @@ export const sendMessage = action({
           // Convert conversation history to Google AI format
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system") // Filter out system messages
-            .map((msg: any) => ({
-              role: msg.role === "assistant" ? "model" : "user",
-              parts: [{ text: msg.content }],
-            }));
+            .map((msg: any) => {
+              // If message already has parts (multimodal), use them
+              if (msg.parts) {
+                return {
+                  role: msg.role === "assistant" ? "model" : "user",
+                  parts: msg.parts,
+                };
+              }
+              // Otherwise, create text part
+              return {
+                role: msg.role === "assistant" ? "model" : "user",
+                parts: [{ text: msg.content }],
+              };
+            });
 
           // Add system prompt as first user message if provided
           if (args.systemPrompt) {
             const systemMsg = conversationHistory.find((msg: any) => msg.role === "system");
             if (systemMsg || args.systemPrompt) {
-              contents.unshift({
-                role: "user",
-                parts: [{ text: `System: ${systemMsg?.content || args.systemPrompt}\n\nUser: ${contents[0]?.parts[0]?.text || ''}` }],
-              });
-              if (contents.length > 1) {
-                contents.splice(1, 1); // Remove the duplicate first user message
+              const firstUserMsg = contents[0];
+              if (firstUserMsg && firstUserMsg.role === "user") {
+                // Prepend system prompt to first user message
+                const systemText = `System: ${systemMsg?.content || args.systemPrompt}\n\nUser: `;
+                if (firstUserMsg.parts[0] && firstUserMsg.parts[0].text) {
+                  firstUserMsg.parts[0].text = systemText + firstUserMsg.parts[0].text;
+                } else {
+                  // If first part isn't text, add system prompt as first part
+                  firstUserMsg.parts.unshift({ text: systemText });
+                }
+              } else {
+                // No user messages, create one with system prompt
+                contents.unshift({
+                  role: "user",
+                  parts: [{ text: `System: ${systemMsg?.content || args.systemPrompt}` }],
+                });
               }
             }
           }

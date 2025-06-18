@@ -88,8 +88,9 @@ const applicationTables = {
         arguments: v.string(),
       }),
     }))),
-    // Image generation
+    // Media generation
     generatedImageUrl: v.optional(v.string()),
+    generatedVideoUrl: v.optional(v.string()),
     // Edit tracking
     editedAt: v.optional(v.number()),
   })
