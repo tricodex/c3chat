@@ -1,127 +1,127 @@
-# C3Chat - Minimal AI Chat with Multi-Model Support
+# C3Chat - AI Chat with Multi-Model Support
 
-A modern, minimal AI chat application built with React 19, Vite 6, and Convex. Features a monospace design aesthetic and support for multiple AI providers.
+🏆 **T3 Chat Cloneathon Submission**
 
-## Features
+A modern, feature-rich AI chat application with support for 10+ LLM providers, real-time sync, and enterprise features.
 
-- **Multi-Model AI Support**: OpenAI, Google Gemini, Anthropic Claude, OpenRouter, Groq, Together AI, Fireworks AI, DeepSeek, Mistral, Cohere
-- **Enterprise Chat Features**: 
-  - Message editing and regeneration
-  - Conversation branching
-  - Copy functionality with visual feedback
-  - Thread isolation for separate conversations
-- **Real-time Sync**: Powered by Convex's reactive database
-- **Voice Support**: OpenAI Whisper for speech-to-text and TTS for text-to-speech
-- **Scalable Architecture**: 
-  - Redis-based distributed caching
-  - Cross-tab synchronization (<5ms)
-  - Handles 1M+ messages per thread
-  - Circuit breaker for network resilience
-- **Modern Stack**: React 19, TypeScript, Tailwind CSS v4
+**[🚀 Try Demo](https://c3chat.vercel.app)** | **[📺 Video Demo](#)** | **[📖 Documentation](docs/)**
 
-## Getting Started
+## ✨ Features
 
-### Prerequisites
-- [Bun](https://bun.sh) (recommended) or Node.js
-- A Convex account for the backend
+### Core Features (Competition Requirements)
+- ✅ **Multi-Model Chat**: 10+ LLM providers (OpenAI, Anthropic, Google, Meta, xAI, DeepSeek, etc.)
+- ✅ **Authentication & Sync**: Real-time sync across devices with Convex
+- ✅ **Browser Friendly**: Modern web app with React 19
+- ✅ **Easy to Try**: [Live demo](https://c3chat.vercel.app) - no setup required!
 
-### Installation
+### Bonus Features (All Implemented!)
+- ✅ **Attachment Support**: Upload images & PDFs with AI analysis
+- ✅ **Image Generation**: DALL-E 3, Gemini Flash, Imagen 3
+- ✅ **Syntax Highlighting**: Beautiful code blocks with copy functionality
+- ✅ **Resumable Streams**: Continue generation after refresh
+- ✅ **Chat Branching**: Fork conversations at any point
+- ✅ **Chat Sharing**: Public/private threads with collaboration
+- ✅ **Web Search**: Integrated Brave, Tavily, Serper search
+- ✅ **Bring Your Own Key**: Use your own API keys or try anonymously
+
+### Extra Features
+- 🎙️ **Voice Chat**: Speech-to-text and text-to-speech
+- ⚡ **Redis Caching**: Sub-5ms cross-tab sync (optional)
+- 📝 **Message Editing**: Edit and regenerate any message
+- 🔍 **Command Palette**: Quick actions with `/` commands
+- 🔐 **Security**: Encrypted key storage, secure auth
+- 📊 **Token Tracking**: Monitor usage and costs
+
+## 🚀 Quick Start
+
+### Try Online
+Visit [c3chat.vercel.app](https://c3chat.vercel.app) - no installation required!
+
+### Run Locally
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/c3chat.git
+cd c3chat
+
+# Install dependencies
 bun install
-```
 
-### Development
-```bash
-# Run both frontend and backend
+# Copy environment variables
+cp .env.local.example .env.local
+
+# Run development server
 bun run dev
-
-# Frontend only
-bun run dev:frontend
-
-# Backend only
-bun run dev:backend
 ```
 
-### Building
-```bash
-# Build for production
-bun run build
+## 🛠️ Tech Stack
 
-# Preview production build
-bun run preview
-```
+- **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite 6
+- **Backend**: Convex (reactive database + serverless)
+- **AI**: 10+ LLM providers with streaming support
+- **Caching**: Upstash Redis (optional, for scale)
+- **Testing**: Vitest, React Testing Library
+- **Deployment**: Vercel + Convex
 
-### Testing
-```bash
-# Run tests in watch mode
-bun run test
+## 📸 Screenshots
 
-# Run tests once
-bun run test:run
+### Multi-Model Chat
+![Chat Interface](docs/screenshots/chat.png)
 
-# Run with coverage
-bun run test:coverage
-```
+### Image Generation
+![Image Generation](docs/screenshots/image-gen.png)
 
-## Deployment
+### Chat Branching
+![Branching](docs/screenshots/branching.png)
 
-### Vercel
-The app is configured for easy deployment to Vercel:
-
-1. Install Vercel CLI: `bun add -g vercel`
-2. Deploy: `vercel`
-
-The project includes:
-- `vercel.json` with proper Vite + Bun configuration
-- Platform-specific dependencies for Linux builds
-- Automatic bun detection via `bun.lock`
-
-### Convex Backend
-Deploy the Convex backend:
-```bash
-bunx convex deploy
-```
-
-## Project Structure
+## 🏗️ Architecture
 
 ```
 c3chat/
-├── src/              # Frontend React application
-├── convex/           # Backend functions and schema
-├── dist/             # Production build output
-└── public/           # Static assets
+├── src/              # React application
+│   ├── components/   # UI components
+│   ├── lib/          # Utilities & sync engine
+│   └── pages/        # Route pages
+├── convex/           # Backend functions
+│   ├── threads.ts    # Thread management
+│   ├── messages.ts   # Message operations
+│   └── auth.ts       # Authentication
+└── docs/             # Documentation
 ```
 
-## Environment Variables
-
-### Required Variables
+## 🔑 Environment Variables
 
 ```bash
-# Convex
+# Required
 VITE_CONVEX_URL=your-convex-url
 
-# Redis Cache (Upstash)
+# Optional (for Redis caching)
 VITE_KV_REST_API_URL=your-upstash-url
 VITE_KV_REST_API_TOKEN=your-upstash-token
-VITE_ENABLE_REDIS_CACHE=false # Set to true to enable Redis
+VITE_ENABLE_REDIS_CACHE=false
 
-# AI Providers (stored encrypted in Convex)
-# Configure via Settings UI in the app
+# API keys configured in-app via Settings UI
 ```
 
-- Frontend: Use `VITE_*` prefix (exposed to browser)
-- Backend: Standard variables in Convex functions
-- Copy `.env.local.example` to `.env.local` and fill in values
+## 📚 Documentation
 
-## Tech Stack
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Redis Integration](docs/REDIS_INTEGRATION_SUMMARY.md)
+- [API Providers](docs/PROVIDERS.md)
+- [Contributing](CONTRIBUTING.md)
 
-- **Frontend**: React 19 + Vite 6 + TypeScript
-- **Backend**: Convex (reactive database + serverless)
-- **Caching**: Upstash Redis (distributed cache layer)
-- **Styling**: Tailwind CSS v4 (PostCSS-based)
-- **Testing**: Vitest + React Testing Library
-- **Package Manager**: Bun
+## 🏆 Competition Submission
 
-## License
+This project was built for the T3 Chat Cloneathon, implementing all core requirements and bonus features:
 
-This project was built with [Chef](https://chef.convex.dev) and is connected to Convex deployment [`beaming-nightingale-998`](https://dashboard.convex.dev/d/beaming-nightingale-998).
+- **Unique Features**: Voice chat, Redis caching for scale, 10+ LLM providers
+- **Code Quality**: TypeScript, comprehensive tests, clean architecture
+- **User Experience**: Minimal design, fast performance, intuitive UI
+- **Open Source**: MIT License, all code available
+
+## 🙏 Acknowledgments
+
+Built with [Convex](https://convex.dev), [Tailwind CSS](https://tailwindcss.com), and love for the T3 community.
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
