@@ -5,19 +5,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ### Development
-- `npm run dev` - Runs both frontend (Vite) and backend (Convex) in parallel
-- `npm run dev:frontend` - Frontend only with auto-open browser
-- `npm run dev:backend` - Convex backend only
-- `npx convex dev` - Direct Convex development mode
+- `bun run dev` - Runs both frontend (Vite) and backend (Convex) in parallel
+- `bun run dev:frontend` - Frontend only with auto-open browser
+- `bun run dev:backend` - Convex backend only
+- `bunx convex dev` - Direct Convex development mode
 
 ### Testing
-- `npm run test` - Run tests in watch mode (Vitest)
-- `npm run test:run` - Run tests once
-- `npm run test:ui` - Open Vitest UI
-- `npm run test:coverage` - Run tests with coverage report
+- `bun run test` - Run tests in watch mode (Vitest)
+- `bun run test:run` - Run tests once
+- `bun run test:ui` - Open Vitest UI
+- `bun run test:coverage` - Run tests with coverage report
+
+### Building & Deployment
+- `bun run build` - Build for production (using Vite)
+- `bun run preview` - Preview production build locally
+- `vercel` - Deploy to Vercel (requires Vercel CLI)
 
 ### Validation
-- `npm run lint` - Type check both frontend and backend code, validate Convex functions, and verify build
+- `bun run lint` - Type check both frontend and backend code, validate Convex functions, and verify build
 
 ## Architecture
 
@@ -63,7 +68,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Testing Strategy
 - Unit tests for utilities and hooks
 - Component tests with React Testing Library
-- Run `npm run test:coverage` before major changes
+- Run `bun run test:coverage` before major changes
 - Tests should be colocated with the code they test
 
 ### Authentication
@@ -83,7 +88,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Database queries are reactive and real-time by default
 - File uploads use Convex storage with automatic URL generation
 - Vector search powered by Convex's built-in vector indexes
-- Deployment: `npx convex deploy` for production
+- Deployment: `bunx convex deploy` for production
+
+## Deployment to Vercel
+- **Platform**: Vercel supports Vite and Bun out of the box
+- **Build Command**: `bun run build` (configured in vercel.json)
+- **Install Command**: `bun install` (auto-detected from bun.lock)
+- **Output Directory**: `dist` (Vite default)
+- **Platform Dependencies**: Linux x64 GNU binaries added to optionalDependencies:
+  - `@rollup/rollup-linux-x64-gnu`
+  - `@tailwindcss/oxide-linux-x64-gnu`
+  - `lightningcss-linux-x64-gnu`
+- **Deploy Command**: `vercel` (after local build)
 
 ## CRITICAL: Package Dependencies
 - **Google AI**: ALWAYS use `@google/genai` version ^1.5.1 (NOT `@google/generative-ai` which is deprecated)

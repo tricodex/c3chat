@@ -1,28 +1,106 @@
-# C3Chat - AI Chat App with Convex
-  
-This is a project built with [Chef](https://chef.convex.dev) using [Convex](https://convex.dev) as its backend.
-  
-This project is connected to the Convex deployment named [`beaming-nightingale-998`](https://dashboard.convex.dev/d/beaming-nightingale-998).
-  
-## Project structure
-  
-The frontend code is in the `app` directory and is built with [Vite](https://vitejs.dev/).
-  
-The backend code is in the `convex` directory.
-  
-`npm run dev` will start the frontend and backend servers.
+# C3Chat - Minimal AI Chat with Multi-Model Support
 
-## App authentication
+A modern, minimal AI chat application built with React 19, Vite 6, and Convex. Features a monospace design aesthetic and support for multiple AI providers.
 
-Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
+## Features
 
-## Developing and deploying your app
+- **Multi-Model AI Support**: OpenAI, Google Gemini, Anthropic Claude, OpenRouter, Groq, Together AI, Fireworks AI, DeepSeek, Mistral, Cohere
+- **Enterprise Chat Features**: 
+  - Message editing and regeneration
+  - Conversation branching
+  - Copy functionality with visual feedback
+  - Thread isolation for separate conversations
+- **Real-time Sync**: Powered by Convex's reactive database
+- **Voice Support**: OpenAI Whisper for speech-to-text and TTS for text-to-speech
+- **Modern Stack**: React 19, TypeScript, Tailwind CSS v4
 
-Check out the [Convex docs](https://docs.convex.dev/) for more information on how to develop with Convex.
-* If you're new to Convex, the [Overview](https://docs.convex.dev/understanding/) is a good place to start
-* Check out the [Hosting and Deployment](https://docs.convex.dev/production/) docs for how to deploy your app
-* Read the [Best Practices](https://docs.convex.dev/understanding/best-practices/) guide for tips on how to improve you app further
+## Getting Started
 
-## HTTP API
+### Prerequisites
+- [Bun](https://bun.sh) (recommended) or Node.js
+- A Convex account for the backend
 
-User-defined http routes are defined in the `convex/router.ts` file. We split these routes into a separate file from `convex/http.ts` to allow us to prevent the LLM from modifying the authentication routes.
+### Installation
+```bash
+bun install
+```
+
+### Development
+```bash
+# Run both frontend and backend
+bun run dev
+
+# Frontend only
+bun run dev:frontend
+
+# Backend only
+bun run dev:backend
+```
+
+### Building
+```bash
+# Build for production
+bun run build
+
+# Preview production build
+bun run preview
+```
+
+### Testing
+```bash
+# Run tests in watch mode
+bun run test
+
+# Run tests once
+bun run test:run
+
+# Run with coverage
+bun run test:coverage
+```
+
+## Deployment
+
+### Vercel
+The app is configured for easy deployment to Vercel:
+
+1. Install Vercel CLI: `bun add -g vercel`
+2. Deploy: `vercel`
+
+The project includes:
+- `vercel.json` with proper Vite + Bun configuration
+- Platform-specific dependencies for Linux builds
+- Automatic bun detection via `bun.lock`
+
+### Convex Backend
+Deploy the Convex backend:
+```bash
+bunx convex deploy
+```
+
+## Project Structure
+
+```
+c3chat/
+├── src/              # Frontend React application
+├── convex/           # Backend functions and schema
+├── dist/             # Production build output
+└── public/           # Static assets
+```
+
+## Environment Variables
+
+- Frontend: Use `VITE_*` prefix (exposed to browser)
+- Backend: Standard variables in Convex functions
+- See `.env.example` for required variables
+
+## Tech Stack
+
+- **Frontend**: React 19 + Vite 6 + TypeScript
+- **Backend**: Convex (reactive database + serverless)
+- **Styling**: Tailwind CSS v4 (PostCSS-based)
+- **Testing**: Vitest + React Testing Library
+- **Package Manager**: Bun
+
+## License
+
+This project was built with [Chef](https://chef.convex.dev) and is connected to Convex deployment [`beaming-nightingale-998`](https://dashboard.convex.dev/d/beaming-nightingale-998).

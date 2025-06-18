@@ -32,3 +32,6 @@ package-lock.json
 # YoYo AI version control directory
 .yoyo/
 .vercel
+
+# Project notes
+notes.md
