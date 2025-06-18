@@ -418,27 +418,24 @@ export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
   if (!threadId) return [];
   
-  // Only log when there's a mismatch or issue
-  const viewportCount = state.currentViewport?.messages.length || 0;
-  const memoryCount = state.messages[threadId]?.length || 0;
+  // Use memory messages (which come directly from Convex)
+  const memoryMessages = state.messages[threadId] || [];
   
-  if (viewportCount !== memoryCount && state.currentViewport?.threadId === threadId) {
-    console.log('📋 Message count mismatch:', {
-      threadId,
-      viewportCount,
-      memoryCount,
-    });
-  }
-  
-  // CRITICAL: Check if viewport is loaded and matches thread
+  // If viewport is loaded and matches thread, prefer viewport
   if (state.currentViewport && 
-      state.currentViewport.threadId === threadId) {
+      state.currentViewport.threadId === threadId &&
+      state.currentViewport.messages.length > 0) {
     
-    // If viewport has no messages but memory has messages, viewport is stale
-    if (state.currentViewport.messages.length === 0 && 
-        state.messages[threadId]?.length > 0) {
-      console.warn('⚠️ Viewport is empty but memory has messages, using memory messages');
-      return state.messages[threadId] || [];
+    // Only log when there's a significant mismatch
+    const viewportCount = state.currentViewport.messages.length;
+    const memoryCount = memoryMessages.length;
+    
+    if (Math.abs(viewportCount - memoryCount) > 1) {
+      console.log('📋 Message count mismatch:', {
+        threadId,
+        viewportCount,
+        memoryCount,
+      });
     }
     
     // Convert cached messages to Message type
@@ -462,11 +459,7 @@ export const useMessages = (threadId?: string): Message[] => {
     }));
   }
   
-  // FALLBACK: Only use memory if viewport not ready
-  // This should be temporary during initial load
-  console.warn(`Viewport not ready for thread ${threadId}, using memory messages`);
-  const memoryMessages = state.messages[threadId] || [];
-  console.log(`📚 Memory messages for thread ${threadId}:`, memoryMessages.length);
+  // Use memory messages directly from Convex (always up to date)
   return memoryMessages;
 };
 
@@ -590,21 +583,20 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId || '' });
         dispatch({ type: 'SELECT_THREAD', payload: threadId });
         
+        // Clear viewport to force fresh load
+        dispatch({ type: 'SET_VIEWPORT', payload: null });
+        
         if (threadId && isRedisEnabled) {
           try {
-            console.log('🎯 Loading viewport for selected thread:', threadId);
+            // Try to load from Redis first (for faster initial display)
             const viewport = await redisCache.current.getViewport(threadId);
-            console.log('📊 Viewport loaded in selectThread:', {
-              threadId: viewport.threadId,
-              messageCount: viewport.messages.length,
-              hasMoreTop: viewport.hasMore.top,
-              hasMoreBottom: viewport.hasMore.bottom,
-            });
-            
-            // Always set viewport, even if empty (to clear previous thread's viewport)
-            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+            if (viewport && viewport.messages.length > 0) {
+              dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+            }
+            // Convex messages will update the viewport when they arrive
           } catch (error) {
             console.error('Failed to load viewport from Redis:', error);
+            // Continue - Convex messages will populate the viewport
           }
         }
       } finally {
@@ -689,15 +681,10 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
         
-        // Refresh viewport after sending message if Redis is enabled
+        // Update viewport smoothly after sending message
         if (isRedisEnabled) {
           try {
-            // Clear viewport cache to force fresh load
-            dispatch({ type: 'SET_VIEWPORT', payload: null });
-            
-            // Small delay to ensure message is synced
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
+            // Don't clear viewport - update it smoothly
             const viewport = await redisCache.current.getViewport(threadId);
             dispatch({ type: 'SET_VIEWPORT', payload: viewport });
           } catch (error) {
@@ -860,74 +847,93 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [convexThreads]);
   
+  // Debounce and batch message sync to reduce re-renders
+  const syncTimeoutRef = useRef<NodeJS.Timeout>();
+  
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
-      console.log('Setting messages from Convex:', {
-        threadId: state.selectedThreadId,
-        messageCount: convexMessages.length,
-        firstMessage: convexMessages[0],
-      });
+      // Clear any pending sync
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
       
+      // Set messages immediately for UI responsiveness
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: {
         threadId: state.selectedThreadId,
         messages: convexMessages,
       }});
       
-      // Sync to Redis if enabled and update viewport
-      if (isRedisEnabled) {
-        console.log('🔄 Syncing messages to Redis:', {
-          threadId: state.selectedThreadId,
-          messageCount: convexMessages.length,
-        });
-        
-        redisCache.current.syncMessages(
-          state.selectedThreadId,
-          convexMessages.map(msg => ({
-            _id: msg._id,
-            threadId: msg.threadId,
-            content: msg.content,
-            role: msg.role,
-            timestamp: msg._creationTime || Date.now(),
-            version: 1,
-            metadata: {
-              provider: msg.provider,
-              model: msg.model,
-              inputTokens: msg.inputTokens,
-              outputTokens: msg.outputTokens,
-            },
-          }))
-        ).then(async () => {
-          // Clear viewport first to force fresh load
-          dispatch({ type: 'SET_VIEWPORT', payload: null });
-          
-          // Small delay to ensure Redis sync is complete
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Update viewport with fresh data
+      // CRITICAL FIX: Update viewport immediately with convex messages
+      // This ensures UI updates right away without waiting for Redis
+      // Deduplicate messages to prevent duplicate key errors
+      const uniqueMessages = Array.from(
+        new Map(convexMessages.map(msg => [msg._id, msg])).values()
+      );
+      
+      const immediateViewport = {
+        threadId: state.selectedThreadId,
+        messages: uniqueMessages.map(msg => ({
+          _id: msg._id,
+          threadId: msg.threadId,
+          content: msg.content,
+          role: msg.role,
+          timestamp: msg._creationTime || Date.now(),
+          version: 1,
+          isOptimistic: false,
+          metadata: {
+            provider: msg.provider,
+            model: msg.model,
+            inputTokens: msg.inputTokens,
+            outputTokens: msg.outputTokens,
+            generatedImageUrl: msg.generatedImageUrl,
+            attachments: msg.attachments || [],
+          },
+        })),
+        startCursor: uniqueMessages[0]?._id || '',
+        endCursor: uniqueMessages[uniqueMessages.length - 1]?._id || '',
+        hasMore: { top: false, bottom: false },
+      };
+      dispatch({ type: 'SET_VIEWPORT', payload: immediateViewport });
+      
+      // Debounce Redis sync to avoid rapid updates
+      syncTimeoutRef.current = setTimeout(async () => {
+        if (isRedisEnabled) {
           try {
-            console.log('📖 Loading viewport from Redis for thread:', state.selectedThreadId);
-            const viewport = await redisCache.current.getViewport(state.selectedThreadId);
-            console.log('✅ Viewport loaded:', {
-              threadId: viewport.threadId,
-              messageCount: viewport.messages.length,
-              hasMoreTop: viewport.hasMore.top,
-              hasMoreBottom: viewport.hasMore.bottom,
-            });
+            // Sync to Redis in background (with deduplication)
+            const uniqueMessagesForRedis = Array.from(
+              new Map(convexMessages.map(msg => [msg._id, msg])).values()
+            );
             
-            // Always set viewport even if empty (it means the thread is truly empty)
-            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+            await redisCache.current.syncMessages(
+              state.selectedThreadId,
+              uniqueMessagesForRedis.map(msg => ({
+                _id: msg._id,
+                threadId: msg.threadId,
+                content: msg.content,
+                role: msg.role,
+                timestamp: msg._creationTime || Date.now(),
+                version: 1,
+                metadata: {
+                  provider: msg.provider,
+                  model: msg.model,
+                  inputTokens: msg.inputTokens,
+                  outputTokens: msg.outputTokens,
+                },
+              }))
+            );
           } catch (error) {
-            console.error('Failed to update viewport after syncing messages:', error);
-            // On error, fall back to memory messages
-            dispatch({ type: 'SET_VIEWPORT', payload: null });
+            console.error('Failed to sync messages to Redis:', error);
+            // Don't clear viewport on error - keep existing data
           }
-        }).catch(error => {
-          console.error('❌ Failed to sync messages to Redis:', error);
-          // On error, clear viewport to fall back to memory
-          dispatch({ type: 'SET_VIEWPORT', payload: null });
-        });
-      }
+        }
+      }, 300); // 300ms debounce
     }
+    
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
   }, [convexMessages, state.selectedThreadId, isRedisEnabled]);
   
   // Cross-tab data synchronization

@@ -29,10 +29,7 @@ const getRedis = (): Redis => {
     const url = import.meta.env.VITE_KV_REST_API_URL;
     const token = import.meta.env.VITE_KV_REST_API_TOKEN;
     
-    console.log('🔑 getRedis - Creating Redis instance:', {
-      hasUrl: !!url,
-      hasToken: !!token,
-    });
+    // Create Redis instance with Upstash credentials
     
     if (!url || !token) {
       throw new Error("Redis configuration missing. Please set VITE_KV_REST_API_URL and VITE_KV_REST_API_TOKEN in your .env.local file");
@@ -43,7 +40,7 @@ const getRedis = (): Redis => {
       token,
     });
     
-    console.log('✅ Redis instance created successfully');
+    // Redis instance created
   }
   return redis;
 };
@@ -167,10 +164,7 @@ export class RedisCache {
           -VIEWPORT_SIZE,
           -1
         );
-        console.log('📥 Raw messages from Redis:', {
-          count: rawMessages?.length || 0,
-          firstMessage: rawMessages?.[0],
-        });
+        // Process raw messages from Redis
         messages = (rawMessages || []).map(item => 
           typeof item === 'string' ? JSON.parse(item) : item
         ) as CachedMessage[];
@@ -479,13 +473,6 @@ export class RedisCache {
   
   // Batch operations for sync
   async syncMessages(threadId: string, messages: CachedMessage[]): Promise<void> {
-    console.log('🔄 syncMessages called:', {
-      threadId,
-      messageCount: messages.length,
-      firstMessage: messages[0],
-      lastMessage: messages[messages.length - 1]
-    });
-    
     if (messages.length === 0) return;
     
     try {
@@ -506,23 +493,18 @@ export class RedisCache {
           member: JSON.stringify(msg),
         }));
         
-        // Batch add (Redis supports up to 1000 items per zadd)
-        for (let i = 0; i < members.length; i += 100) {
-          const batch = members.slice(i, i + 100);
-          
-          // Create zadd arguments
-          const zaddArgs: Record<string, number> = {};
-          batch.forEach(({ score, member }) => {
-            zaddArgs[member] = score;
+        // Add messages one by one (Upstash format)
+        for (const { score, member } of members) {
+          await getRedis().zadd(Keys.messages(threadId), {
+            score,
+            member,
           });
-          
-          await getRedis().zadd(Keys.messages(threadId), zaddArgs);
         }
         
         // Set expiry
         await getRedis().expire(Keys.messages(threadId), CACHE_TTL);
         
-        console.log('✅ Messages synced to Redis successfully');
+        // Messages synced successfully
       } catch (error) {
         console.error('❌ Failed to sync messages to Redis:', error);
         throw error;
@@ -712,19 +694,19 @@ let isNoOp = false;
 export function getRedisCache(): RedisCache {
   // Always check if we need to upgrade from NoOp to real Redis
   if (cacheInstance && isNoOp && isRedisConfigured()) {
-    console.log('🔄 Upgrading from NoOp to real Redis cache');
+    // Upgrade from NoOp to real Redis cache
     cacheInstance = null;
     isNoOp = false;
   }
   
   if (!cacheInstance) {
     if (!isRedisConfigured()) {
-      console.warn('Redis not configured. Using no-op cache implementation.');
+      // Redis not configured - use no-op cache
       // Create a singleton NoOpRedisCache
       cacheInstance = new NoOpRedisCache() as any;
       isNoOp = true;
     } else {
-      console.log('✅ Creating Redis cache instance');
+      // Create Redis cache instance
       cacheInstance = new RedisCache();
       isNoOp = false;
     }

@@ -54,73 +54,107 @@ export function ChatView() {
   }, [state.currentViewport, selectedThread?._id]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    }
   };
 
-  // Check if user is near bottom of scroll
+  // Throttled scroll handler to reduce excessive calls
+  const scrollThrottleRef = useRef<NodeJS.Timeout>();
+  
   const checkIfNearBottom = async () => {
     const container = messagesContainerRef.current;
-    if (!container || isLoadingMore) return true;
+    if (!container) return true;
     
+    // Update near bottom status immediately
     const threshold = 150;
     const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     setIsNearBottom(isNear);
     
-    // NEW: Check if we need to load more messages
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    
-    // Load more at top
-    if (scrollTop < SCROLL_THRESHOLD && viewportInfo?.hasMoreTop && !isLoadingMore) {
-      setIsLoadingMore(true);
-      const previousHeight = scrollHeight;
-      
-      try {
-        await actions.loadMoreMessages('up');
+    // Throttle viewport loading checks
+    if (!scrollThrottleRef.current && !isLoadingMore) {
+      scrollThrottleRef.current = setTimeout(async () => {
+        scrollThrottleRef.current = null;
         
-        // Maintain scroll position after loading
-        requestAnimationFrame(() => {
-          if (container) {
-            const newScrollHeight = container.scrollHeight;
-            const heightDiff = newScrollHeight - previousHeight;
-            container.scrollTop = scrollTop + heightDiff;
+        const scrollTop = container.scrollTop;
+        const scrollHeight = container.scrollHeight;
+        const clientHeight = container.clientHeight;
+        
+        // Load more at top
+        if (scrollTop < SCROLL_THRESHOLD && viewportInfo?.hasMoreTop && !isLoadingMore) {
+          setIsLoadingMore(true);
+          const previousHeight = scrollHeight;
+          
+          try {
+            await actions.loadMoreMessages('up');
+            
+            // Maintain scroll position after loading
+            requestAnimationFrame(() => {
+              if (container) {
+                const newScrollHeight = container.scrollHeight;
+                const heightDiff = newScrollHeight - previousHeight;
+                container.scrollTop = scrollTop + heightDiff;
+              }
+            });
+          } catch (error) {
+            console.error('Failed to load more messages:', error);
+          } finally {
+            setIsLoadingMore(false);
           }
-        });
-      } catch (error) {
-        console.error('Failed to load more messages:', error);
-      } finally {
-        setIsLoadingMore(false);
-      }
-    }
-    
-    // Load more at bottom
-    if (scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD && 
-        viewportInfo?.hasMoreBottom && !isLoadingMore) {
-      setIsLoadingMore(true);
-      try {
-        await actions.loadMoreMessages('down');
-      } catch (error) {
-        console.error('Failed to load more messages:', error);
-      } finally {
-        setIsLoadingMore(false);
-      }
+        }
+        
+        // Load more at bottom
+        if (scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD && 
+            viewportInfo?.hasMoreBottom && !isLoadingMore) {
+          setIsLoadingMore(true);
+          try {
+            await actions.loadMoreMessages('down');
+          } catch (error) {
+            console.error('Failed to load more messages:', error);
+          } finally {
+            setIsLoadingMore(false);
+          }
+        }
+      }, 200); // 200ms throttle
     }
     
     return isNear;
   };
 
-  // Auto-scroll only when appropriate
+  // Smart auto-scroll with debouncing
+  const scrollDebounceRef = useRef<NodeJS.Timeout>();
+  const previousMessageCount = useRef(messages.length);
+  
   useEffect(() => {
-    // Only auto-scroll if:
-    // 1. User is near bottom (following conversation)
-    // 2. Or it's the initial load (messages.length === 0 -> messages.length > 0)
-    // 3. Or user just sent a message (shouldAutoScroll flag)
-    if (isNearBottom || shouldAutoScroll || messages.length <= 1) {
-      scrollToBottom();
-      setShouldAutoScroll(false);
+    // Clear any pending scroll
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current);
     }
-  }, [messages, isNearBottom, shouldAutoScroll]);
+    
+    // Determine if we should scroll
+    const isInitialLoad = previousMessageCount.current === 0 && messages.length > 0;
+    const isNewMessage = messages.length > previousMessageCount.current;
+    const shouldScroll = isNearBottom || shouldAutoScroll || isInitialLoad;
+    
+    // Update previous count
+    previousMessageCount.current = messages.length;
+    
+    if (shouldScroll && isNewMessage) {
+      // Debounce scroll to prevent jittery behavior
+      scrollDebounceRef.current = setTimeout(() => {
+        scrollToBottom();
+        setShouldAutoScroll(false);
+      }, 100);
+    }
+    
+    return () => {
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
+      }
+    };
+  }, [messages.length, isNearBottom, shouldAutoScroll]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

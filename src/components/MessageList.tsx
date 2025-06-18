@@ -1,4 +1,4 @@
-import { RefObject, useState } from "react";
+import { RefObject, useState, memo } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { Message } from "../lib/sync-engine-switcher";
 import { Id } from "../../convex/_generated/dataModel";
@@ -30,7 +30,7 @@ const providerIcons: Record<string, React.ComponentType<any>> = {
   openrouter: Globe,
 };
 
-export function MessageList({ messages, messagesEndRef, threadId, containerRef, onScroll }: MessageListProps) {
+export const MessageList = memo(function MessageList({ messages, messagesEndRef, threadId, containerRef, onScroll }: MessageListProps) {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   
@@ -73,14 +73,19 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
     );
   }
 
-  // Check for duplicate IDs
-  const messageIds = messages.map(m => m._id);
-  const uniqueIds = new Set(messageIds);
-  if (messageIds.length !== uniqueIds.size) {
+  // Deduplicate messages to prevent React key warnings
+  const uniqueMessages = Array.from(
+    new Map(messages.map(msg => [msg._id, msg])).values()
+  );
+  
+  // Check for duplicate IDs (development only)
+  if (process.env.NODE_ENV === 'development' && messages.length !== uniqueMessages.length) {
+    const messageIds = messages.map(m => m._id);
+    const duplicates = messageIds.filter((id, index) => messageIds.indexOf(id) !== index);
     console.error('DUPLICATE MESSAGE IDS DETECTED!', {
       total: messageIds.length,
-      unique: uniqueIds.size,
-      duplicates: messageIds.filter((id, index) => messageIds.indexOf(id) !== index)
+      unique: uniqueMessages.length,
+      duplicates
     });
   }
   
@@ -90,7 +95,7 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
       ref={containerRef}
       onScroll={onScroll}
     >
-      {messages.map((message, index) => {
+      {uniqueMessages.map((message, index) => {
         
         // Get provider icon for assistant messages
         const ProviderIcon = message.role === "assistant" && message.provider 
@@ -99,7 +104,7 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
         
         return (
           <div
-            key={`${message._id}-${index}`}
+            key={message._id}
             className={`c3-message ${message.role} ${message.isOptimistic ? 'optimistic' : ''}`}
             onMouseEnter={() => setHoveredMessageId(message._id)}
             onMouseLeave={() => setHoveredMessageId(null)}
@@ -225,4 +230,4 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
       <div ref={messagesEndRef} />
     </div>
   );
-}
+});

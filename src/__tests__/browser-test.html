@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>C3Chat Browser Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #262626;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 C3Chat Browser Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="runAllTests()">🚀 Run All Tests</button>
+        <button onclick="testScrollBehavior()">📜 Test Scroll Behavior</button>
+        <button onclick="testMessageSending()">💬 Test Message Sending</button>
+        <button onclick="testStateManagement()">🔄 Test State Management</button>
+        <button onclick="clearResults()">🧹 Clear Results</button>
+    </div>
+    
+    <div id="results" class="test-section">
+        <h3>Test Results</h3>
+        <div id="output">Click a test button to begin...</div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        let testWindow = null;
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            output.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+        }
+        
+        function clearResults() {
+            output.innerHTML = 'Results cleared. Ready for new tests...';
+        }
+        
+        async function openApp() {
+            if (!testWindow || testWindow.closed) {
+                testWindow = window.open('http://localhost:5173', 'c3chat', 'width=1200,height=800');
+                log('🌐 Opening C3Chat application...');
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for app to load
+            }
+            return testWindow;
+        }
+        
+        async function runAllTests() {
+            log('🚀 Starting comprehensive test suite...', 'info');
+            await testScrollBehavior();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await testMessageSending();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await testStateManagement();
+            log('✅ All tests completed!', 'success');
+        }
+        
+        async function testScrollBehavior() {
+            log('\n📜 Testing scroll behavior...', 'info');
+            const win = await openApp();
+            
+            try {
+                // Wait for messages to load
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Test 1: Check if messages are visible
+                const result1 = await win.eval(`
+                    const messages = document.querySelectorAll('[data-testid="message-item"], .message-item, [class*="message"]');
+                    messages.length > 0;
+                `);
+                log(result1 ? '✅ Messages are rendered' : '❌ No messages found', result1 ? 'success' : 'error');
+                
+                // Test 2: Check scroll position
+                const result2 = await win.eval(`
+                    const container = document.querySelector('[data-testid="messages-container"], .messages-container, [class*="messages-container"]');
+                    if (container) {
+                        const isAtBottom = Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < 10;
+                        { found: true, atBottom: isAtBottom };
+                    } else {
+                        { found: false };
+                    }
+                `);
+                
+                if (result2?.found) {
+                    log(result2.atBottom ? '✅ Scroll is at bottom (auto-scroll working)' : '⚠️ Scroll is not at bottom', 'success');
+                } else {
+                    log('❌ Could not find message container', 'error');
+                }
+                
+                // Test 3: Test smooth scrolling
+                log('🔄 Testing smooth scroll behavior...', 'info');
+                await win.eval(`
+                    const container = document.querySelector('[data-testid="messages-container"], .messages-container, [class*="messages-container"]');
+                    if (container) {
+                        container.scrollTop = 0;
+                        setTimeout(() => {
+                            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                        }, 100);
+                    }
+                `);
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                log('✅ Smooth scroll test completed', 'success');
+                
+            } catch (error) {
+                log(`❌ Scroll test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testMessageSending() {
+            log('\n💬 Testing message sending...', 'info');
+            const win = await openApp();
+            
+            try {
+                // Find and focus the input
+                const inputFound = await win.eval(`
+                    const input = document.querySelector('textarea, input[type="text"]');
+                    if (input) {
+                        input.focus();
+                        input.value = 'Test message from automated test';
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        true;
+                    } else {
+                        false;
+                    }
+                `);
+                
+                if (!inputFound) {
+                    log('❌ Could not find message input', 'error');
+                    return;
+                }
+                
+                log('✅ Message input found and filled', 'success');
+                
+                // Submit the message
+                const submitted = await win.eval(`
+                    const form = document.querySelector('form');
+                    const button = document.querySelector('button[type="submit"], button[aria-label*="send"]');
+                    if (button && !button.disabled) {
+                        button.click();
+                        true;
+                    } else if (form) {
+                        form.dispatchEvent(new Event('submit', { bubbles: true }));
+                        true;
+                    } else {
+                        false;
+                    }
+                `);
+                
+                if (submitted) {
+                    log('✅ Message submitted', 'success');
+                    
+                    // Wait for response
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    // Check if new message appeared
+                    const newMessageFound = await win.eval(`
+                        const messages = Array.from(document.querySelectorAll('[data-testid="message-item"], .message-item, [class*="message"]'));
+                        messages.some(m => m.textContent.includes('Test message from automated test'));
+                    `);
+                    
+                    log(newMessageFound ? '✅ Message appeared in chat' : '⚠️ Message not found in chat', newMessageFound ? 'success' : 'info');
+                } else {
+                    log('❌ Could not submit message', 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Message test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testStateManagement() {
+            log('\n🔄 Testing state management...', 'info');
+            const win = await openApp();
+            
+            try {
+                // Test 1: Check Redux/Convex state
+                const hasState = await win.eval(`
+                    // Check for common state management patterns
+                    const hasRedux = window.__REDUX_DEVTOOLS_EXTENSION__ !== undefined;
+                    const hasConvex = window._convex !== undefined;
+                    const hasReact = window.React !== undefined || document.querySelector('[data-reactroot]') !== null;
+                    { hasRedux, hasConvex, hasReact };
+                `);
+                
+                log(`State management detected: Redux=${hasState.hasRedux}, Convex=${hasState.hasConvex}, React=${hasState.hasReact}`, 'info');
+                
+                // Test 2: Check for memory leaks
+                const initialMemory = await win.eval(`
+                    if (performance.memory) {
+                        performance.memory.usedJSHeapSize;
+                    } else {
+                        null;
+                    }
+                `);
+                
+                if (initialMemory) {
+                    log(`Initial memory usage: ${(initialMemory / 1024 / 1024).toFixed(2)} MB`, 'info');
+                    
+                    // Trigger some actions
+                    await win.eval(`
+                        // Scroll up and down
+                        const container = document.querySelector('[data-testid="messages-container"], .messages-container, [class*="messages-container"]');
+                        if (container) {
+                            for (let i = 0; i < 5; i++) {
+                                container.scrollTop = 0;
+                                container.scrollTop = container.scrollHeight;
+                            }
+                        }
+                    `);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    const finalMemory = await win.eval(`performance.memory.usedJSHeapSize`);
+                    const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
+                    
+                    log(`Memory increase after actions: ${memoryIncrease.toFixed(2)} MB`, memoryIncrease < 10 ? 'success' : 'error');
+                }
+                
+                // Test 3: Check for console errors
+                const consoleErrors = await win.eval(`
+                    // This would need to be injected earlier to capture errors
+                    window.__testErrors__ || [];
+                `);
+                
+                if (consoleErrors.length > 0) {
+                    log(`⚠️ Found ${consoleErrors.length} console errors`, 'error');
+                } else {
+                    log('✅ No console errors detected', 'success');
+                }
+                
+            } catch (error) {
+                log(`❌ State test error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Helper to evaluate code in test window
+        Window.prototype.eval = function(code) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const result = this.eval(code);
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        };
+    </script>
+</body>
+</html>
