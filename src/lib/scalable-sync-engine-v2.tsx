@@ -599,6 +599,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const messageId = await sendMessageMutation({
           threadId: threadId as Id<"threads">,
           content,
+          role: "user",
           attachmentIds: attachmentIds as Id<"attachments">[],
         });
         
@@ -607,11 +608,10 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (provider && model && apiKey) {
           await generateResponseAction({
             threadId: threadId as Id<"threads">,
-            messageId,
+            userMessageId: messageId,
             provider,
             model,
             apiKey,
-            agentId,
           });
         }
       } catch (error) {
@@ -663,16 +663,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     },
     
     sendMessageWithSearch: async (content: string, threadId: string, provider: string, model: string, apiKey: string, searchQueries: string[], attachmentIds: string[], agentId?: string) => {
-      await sendMessageWithContext({
-        content,
-        threadId: threadId as Id<"threads">,
-        provider,
-        model,
-        apiKey,
-        searchQueries,
-        attachmentIds: attachmentIds as Id<"attachments">[],
-        agentId,
-      });
+      // Note: sendMessageWithContext action doesn't exist in current implementation
+      // This would need to be implemented in convex/messages.ts
+      console.warn('sendMessageWithSearch not implemented in current backend');
+      // For now, just send a regular message
+      await actions().sendMessage(content, threadId, provider, model, apiKey, attachmentIds, agentId);
     },
     
     sendSystemMessage: async (content: string, threadId: string) => {

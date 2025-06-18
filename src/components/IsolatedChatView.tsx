@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChatView } from "./ChatView";
 import { useEnhancedSync, useSelectedThread, useThreads } from "../lib/sync-engine-switcher";
-import { MessageCircle } from "lucide-react";
 
 /**
  * IsolatedChatView ensures complete thread isolation
@@ -27,7 +26,6 @@ export function IsolatedChatView() {
     return (
       <div className="c3-chat-container flex items-center justify-center">
         <div className="text-center">
-          <MessageCircle className="w-16 h-16 mx-auto mb-4 text-[var(--c3-text-muted)]" />
           <h3 className="text-lg font-medium text-[var(--c3-text-secondary)] mb-2">
             No conversations yet
           </h3>
@@ -76,11 +74,24 @@ export function IsolatedChatView() {
     return (
       <div className="c3-chat-container flex items-center justify-center">
         <div className="text-center">
-          <MessageCircle className="w-16 h-16 mx-auto mb-4 text-[var(--c3-text-muted)]" />
           <h2 className="text-xl font-semibold mb-2">Select or create a new chat</h2>
           <p className="text-sm text-[var(--c3-text-secondary)] mb-6">
             Start a conversation to begin
           </p>
+          <button
+            onClick={async () => {
+              setIsCreating(true);
+              try {
+                await actions.createThread();
+              } finally {
+                setIsCreating(false);
+              }
+            }}
+            disabled={isCreating}
+            className="c3-button-primary"
+          >
+            {isCreating ? "Creating..." : "Start New Chat"}
+          </button>
         </div>
       </div>
     );
