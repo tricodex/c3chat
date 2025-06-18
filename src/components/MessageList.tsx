@@ -185,7 +185,6 @@ export function MessageList({ messages, messagesEndRef, threadId, containerRef, 
                   <AttachmentViewer
                     key={attachment._id}
                     attachment={attachment}
-                    variant="compact"
                   />
                 ))}
               </div>

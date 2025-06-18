@@ -1,6 +1,8 @@
 import { useState, useRef, KeyboardEvent } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { Paperclip, Send, Sparkles, Globe, Command, X, Mic, Image, FileText } from "lucide-react";
+import { Paperclip, Send, Sparkles, Globe, Command, X, Mic, Image, FileText, File } from "lucide-react";
 import { VoiceControls } from "./VoiceControls";
 
 interface MessageInputProps {
@@ -26,6 +28,11 @@ export function MessageInput({
 }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showCommands, setShowCommands] = useState(false);
+  
+  // Fetch attachment details
+  const attachmentDetails = useQuery(api.attachments.getByIds, 
+    attachments.length > 0 ? { ids: attachments } : "skip"
+  );
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -53,6 +60,12 @@ export function MessageInput({
     textareaRef.current?.focus();
   };
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const commandSuggestions = [
     { command: "/image", description: "Generate an image with AI", icon: Image },
     { command: "/search", description: "Search the web in real-time", icon: Globe },
@@ -67,24 +80,70 @@ export function MessageInput({
   return (
     <div className="c3-input-area">
       {/* Attachments Preview */}
-      {attachments.length > 0 && (
-      <div className="flex gap-2 mb-3 flex-wrap">
-      {attachments.map((_, index) => (
-      <div key={index} className="c3-attachment-preview">
-      <Paperclip className="w-4 h-4" style={{ color: 'var(--c3-text-secondary)' }} />
-      <button
-      onClick={() => onRemoveAttachment(index)}
-      className="c3-attachment-remove"
-      type="button"
-      >
-      <X className="w-3 h-3" />
-      </button>
-      </div>
-      ))}
-      </div>
+      {attachmentDetails && attachmentDetails.length > 0 && (
+        <div className="px-4 py-3 border-b border-[var(--c3-border-subtle)]">
+          <div className="flex flex-wrap gap-2">
+            {attachmentDetails.map((attachment, index) => {
+              if (!attachment) return null;
+              
+              const getFileIcon = () => {
+                if (attachment.contentType.startsWith("image/")) return Image;
+                if (attachment.contentType === "application/pdf") return FileText;
+                return File;
+              };
+              
+              const FileIcon = getFileIcon();
+              const isImage = attachment.contentType.startsWith("image/");
+              
+              return (
+                <div
+                  key={attachment._id}
+                  className="relative group"
+                >
+                  {isImage && attachment.url ? (
+                    <div className="relative">
+                      <img
+                        src={attachment.url}
+                        alt={attachment.filename}
+                        className="h-16 w-16 object-cover rounded-lg border border-[var(--c3-border-subtle)]"
+                      />
+                      <button
+                        onClick={() => onRemoveAttachment(index)}
+                        className="absolute -top-2 -right-2 p-1 bg-red-500 hover:bg-red-600 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                        type="button"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-[var(--c3-surface-secondary)] rounded-lg border border-[var(--c3-border-subtle)]">
+                      <FileIcon className="w-4 h-4 text-[var(--c3-text-tertiary)]" />
+                      <div className="max-w-[150px]">
+                        <p className="text-xs font-medium text-[var(--c3-text-primary)] truncate">
+                          {attachment.filename}
+                        </p>
+                        <p className="text-[10px] text-[var(--c3-text-tertiary)]">
+                          {formatFileSize(attachment.size)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => onRemoveAttachment(index)}
+                        className="p-1 hover:bg-[var(--c3-surface-hover)] rounded transition-colors"
+                        type="button"
+                      >
+                        <X className="w-3 h-3 text-[var(--c3-text-tertiary)]" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className="c3-input-container">
+        
         <div className="c3-input-wrapper">
           {/* Voice Controls */}
           <VoiceControls

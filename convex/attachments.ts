@@ -259,6 +259,38 @@ export const getByMessage = query({
   },
 });
 
+// Get attachments by IDs
+export const getByIds = query({
+  args: {
+    ids: v.array(v.id("attachments")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const attachments = await Promise.all(
+      args.ids.map(async (id) => {
+        const attachment = await ctx.db.get(id);
+        if (!attachment) return null;
+
+        // Verify user has access
+        if (attachment.threadId) {
+          const thread = await ctx.db.get(attachment.threadId);
+          if (!thread || thread.userId !== userId) return null;
+        }
+
+        const url = await ctx.storage.getUrl(attachment.storageId);
+        return {
+          ...attachment,
+          url,
+        };
+      })
+    );
+
+    return attachments.filter(Boolean);
+  },
+});
+
 // Delete attachment
 export const deleteAttachment = mutation({
   args: {

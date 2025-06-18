@@ -97,6 +97,17 @@ export const create = mutation({
       cursor: args.cursor,
     });
 
+    // Link attachments to message if provided
+    if (args.attachmentIds && args.attachmentIds.length > 0) {
+      await Promise.all(
+        args.attachmentIds.map(async (attachmentId) => {
+          await ctx.db.patch(attachmentId, {
+            messageId: messageId,
+          });
+        })
+      );
+    }
+
     // Update thread's last message time
     await ctx.db.patch(args.threadId, {
       lastMessageAt: Date.now(),

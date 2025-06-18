@@ -10,7 +10,7 @@ import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Video, Trash2, FileText } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Video, Trash2, FileText, X } from "lucide-react";
 import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
 
@@ -510,10 +510,23 @@ export function ChatView() {
 
       {/* File Upload Modal */}
       {showFileUpload && (
-        <FileUpload
-          onUploadComplete={handleFileUploadComplete}
-          onCancel={() => setShowFileUpload(false)}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-[var(--c3-surface-primary)] rounded-lg shadow-xl p-6 max-w-md w-full m-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[var(--c3-text-primary)]">Upload Files</h3>
+              <button
+                onClick={() => setShowFileUpload(false)}
+                className="p-1 rounded hover:bg-[var(--c3-surface-hover)] transition-colors"
+              >
+                <X className="w-5 h-5 text-[var(--c3-text-tertiary)]" />
+              </button>
+            </div>
+            <FileUpload
+              threadId={selectedThread._id}
+              onUploadComplete={handleFileUploadComplete}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

@@ -32,13 +32,14 @@ export function AttachmentViewer({ attachment, onRemove }: AttachmentViewerProps
   const FileIcon = getFileIcon();
   const isImage = attachment.contentType.startsWith("image/") && !imageError;
   const isPDF = attachment.contentType === "application/pdf";
+  const hasUrl = !!attachment.url;
 
   return (
     <>
-      <div className="inline-block max-w-sm">
+      <div className="inline-block">
         <div className="bg-[var(--c3-surface-primary)] border border-[var(--c3-border-subtle)] rounded-[var(--c3-radius-md)] overflow-hidden">
           {/* Preview Area */}
-          {isImage && attachment.url ? (
+          {isImage && hasUrl ? (
             <div
               className="relative cursor-pointer group"
               onClick={() => setIsExpanded(true)}
@@ -46,16 +47,27 @@ export function AttachmentViewer({ attachment, onRemove }: AttachmentViewerProps
               <img
                 src={attachment.url}
                 alt={attachment.filename}
-                className="max-h-48 w-auto object-contain"
+                className="max-h-64 max-w-full object-contain"
                 onError={() => setImageError(true)}
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <Maximize2 className="w-6 h-6 text-white" />
               </div>
             </div>
+          ) : isPDF && hasUrl ? (
+            <div className="p-6 flex flex-col items-center justify-center min-w-[200px]">
+              <FileIcon className="w-12 h-12 text-[var(--c3-text-tertiary)] mb-2" />
+              <p className="text-xs text-[var(--c3-text-secondary)] text-center max-w-[200px] truncate">
+                {attachment.filename}
+              </p>
+            </div>
           ) : (
-            <div className="p-4 flex items-center justify-center">
-              <FileIcon className="w-12 h-12 text-[var(--c3-text-tertiary)]" />
+            <div className="p-6 flex flex-col items-center justify-center min-w-[200px]">
+              <FileIcon className="w-12 h-12 text-[var(--c3-text-tertiary)] mb-2" />
+              <p className="text-xs text-[var(--c3-text-secondary)] text-center max-w-[200px] truncate">
+                {attachment.filename}
+              </p>
             </div>
           )}
 
@@ -72,7 +84,7 @@ export function AttachmentViewer({ attachment, onRemove }: AttachmentViewerProps
               </div>
 
               <div className="flex items-center gap-1">
-                {attachment.url && (
+                {hasUrl ? (
                   <>
                     {isPDF && (
                       <a
@@ -94,6 +106,8 @@ export function AttachmentViewer({ attachment, onRemove }: AttachmentViewerProps
                       <Download className="w-3.5 h-3.5 text-[var(--c3-text-tertiary)]" />
                     </a>
                   </>
+                ) : (
+                  <span className="text-[10px] text-[var(--c3-text-tertiary)] px-2">Loading...</span>
                 )}
                 {onRemove && (
                   <button
@@ -111,7 +125,7 @@ export function AttachmentViewer({ attachment, onRemove }: AttachmentViewerProps
       </div>
 
       {/* Lightbox for images */}
-      {isExpanded && isImage && attachment.url && (
+      {isExpanded && isImage && hasUrl && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setIsExpanded(false)}

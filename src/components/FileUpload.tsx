@@ -142,10 +142,10 @@ export function FileUpload({ threadId, onUploadComplete }: FileUploadProps) {
     <div className="w-full">
       {/* Drop zone */}
       <div
-        className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
+        className={`relative border-2 border-dashed rounded-lg p-6 transition-all ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-[var(--c3-primary)] bg-[var(--c3-primary)]/5'
+            : 'border-[var(--c3-border-subtle)] hover:border-[var(--c3-border-primary)]'
         } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -165,12 +165,12 @@ export function FileUpload({ threadId, onUploadComplete }: FileUploadProps) {
           className="flex flex-col items-center justify-center cursor-pointer"
           onClick={() => fileInputRef.current?.click()}
         >
-          <Upload className="w-8 h-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-600">
+          <Upload className="w-10 h-10 text-[var(--c3-text-tertiary)] mb-3" />
+          <p className="text-sm text-[var(--c3-text-primary)] font-medium">
             {isUploading ? 'Uploading...' : 'Drop files here or click to upload'}
           </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Images and PDFs up to 10MB
+          <p className="text-xs text-[var(--c3-text-tertiary)] mt-1">
+            Images, PDFs, and text files up to 10MB
           </p>
         </div>
       </div>
@@ -181,15 +181,17 @@ export function FileUpload({ threadId, onUploadComplete }: FileUploadProps) {
           {uploadedFiles.map((file) => (
             <div
               key={file.id}
-              className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+              className="flex items-center justify-between p-3 bg-[var(--c3-surface-secondary)] rounded-lg border border-[var(--c3-border-subtle)]"
             >
-              <div className="flex items-center gap-2">
-                {getFileIcon(file.type)}
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-[var(--c3-surface-primary)] rounded">
+                  {getFileIcon(file.type)}
+                </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-700 truncate max-w-[200px]">
+                  <p className="text-sm font-medium text-[var(--c3-text-primary)] truncate max-w-[250px]">
                     {file.name}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[var(--c3-text-tertiary)]">
                     {formatFileSize(file.size)}
                   </p>
                 </div>
@@ -197,7 +199,7 @@ export function FileUpload({ threadId, onUploadComplete }: FileUploadProps) {
               
               <button
                 onClick={() => removeFile(file.id)}
-                className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                className="p-1.5 text-[var(--c3-text-tertiary)] hover:text-[var(--c3-error)] hover:bg-[var(--c3-surface-hover)] rounded transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
