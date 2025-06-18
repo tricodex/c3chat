@@ -415,25 +415,31 @@ export const useThreads = () => {
 
 export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
-  if (!threadId) return [];
-  
-  // If using Redis viewport
-  if (state.currentViewport && state.currentViewport.threadId === threadId) {
-    const viewportMessages = state.currentViewport.messages.map(cached => ({
-      _id: cached._id as Id<"messages">,
-      threadId: cached.threadId as Id<"threads">,
-      role: cached.role,
-      content: cached.content,
-      isOptimistic: cached.isOptimistic,
-      _creationTime: cached.timestamp,
-      createdAt: cached.timestamp,
-      ...cached.metadata,
-    }));
-    return viewportMessages;
+  if (!threadId) {
+    console.log('useMessages: No threadId provided');
+    return [];
   }
   
-  // Fallback to in-memory messages
+  // Always use in-memory messages for now until viewport is properly fixed
   const memoryMessages = state.messages[threadId] || [];
+  
+  console.log('useMessages:', {
+    threadId,
+    memoryMessageCount: memoryMessages.length,
+    stateMessagesKeys: Object.keys(state.messages),
+    hasViewport: !!state.currentViewport,
+    viewportThreadId: state.currentViewport?.threadId,
+  });
+  
+  // Debug logging
+  if (state.currentViewport && state.currentViewport.threadId === threadId) {
+    console.log('Viewport available but using memory messages:', {
+      viewportMessageCount: state.currentViewport.messages.length,
+      memoryMessageCount: memoryMessages.length,
+      threadId
+    });
+  }
+  
   return memoryMessages;
 };
 
@@ -757,6 +763,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
+      console.log('Setting messages from Convex:', {
+        threadId: state.selectedThreadId,
+        messageCount: convexMessages.length,
+        firstMessage: convexMessages[0],
+      });
+      
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: {
         threadId: state.selectedThreadId,
         messages: convexMessages,
