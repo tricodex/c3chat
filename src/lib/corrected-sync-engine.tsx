@@ -1331,9 +1331,10 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           
           dispatch({ type: 'ADD_PENDING_OPERATION', payload: operation });
         } else {
-          // Remove optimistic message on error
-          dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
-          throw error;
+          // Don't remove the message - let the user see what they tried to send
+          // The assistant message will show the error
+          console.error('Non-retryable error, keeping user message for context:', error);
+          // Don't throw error to prevent UI disruption
         }
       }
     },

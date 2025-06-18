@@ -320,7 +320,14 @@ export const generateResponse = action({
           // Check if this is a media-only generation model
           const mediaOnlyModels = ['imagen-3.0-generate-002', 'veo-2.0-generate-001'];
           if (mediaOnlyModels.includes(args.model)) {
-            throw new Error(`Model ${args.model} is for media generation only. Please select a text generation model like gemini-2.5-flash or gemini-2.5-pro.`);
+            // Update the assistant message with helpful error
+            await ctx.runMutation(internal.messages.updateContent, {
+              messageId: assistantMessageId,
+              content: `❌ ${args.model === 'imagen-3.0-generate-002' ? 'Imagen 3' : 'Veo 2'} is for ${args.model === 'imagen-3.0-generate-002' ? 'image' : 'video'} generation only.\n\nTo generate ${args.model === 'imagen-3.0-generate-002' ? 'images' : 'videos'}:\n1. Keep this model selected\n2. Use the \`/${args.model === 'imagen-3.0-generate-002' ? 'image' : 'video'} <your prompt>\` command\n\nFor regular chat, please select a text model like:\n- Gemini 2.5 Flash\n- Gemini 2.5 Pro\n- Gemini 2.0 Flash`,
+              isStreaming: false,
+              cursor: false,
+            });
+            return; // Don't throw, just return early
           }
 
           // Convert conversation history to Google AI format
@@ -672,7 +679,14 @@ export const sendMessage = action({
           // Check if this is a media-only generation model
           const mediaOnlyModels = ['imagen-3.0-generate-002', 'veo-2.0-generate-001'];
           if (mediaOnlyModels.includes(args.model)) {
-            throw new Error(`Model ${args.model} is for media generation only. Please select a text generation model like gemini-2.5-flash or gemini-2.5-pro.`);
+            // Update the assistant message with helpful error
+            await ctx.runMutation(internal.messages.updateContent, {
+              messageId: assistantMessageId,
+              content: `❌ ${args.model === 'imagen-3.0-generate-002' ? 'Imagen 3' : 'Veo 2'} is for ${args.model === 'imagen-3.0-generate-002' ? 'image' : 'video'} generation only.\n\nTo generate ${args.model === 'imagen-3.0-generate-002' ? 'images' : 'videos'}:\n1. Keep this model selected\n2. Use the \`/${args.model === 'imagen-3.0-generate-002' ? 'image' : 'video'} <your prompt>\` command\n\nFor regular chat, please select a text model like:\n- Gemini 2.5 Flash\n- Gemini 2.5 Pro\n- Gemini 2.0 Flash`,
+              isStreaming: false,
+              cursor: false,
+            });
+            return; // Don't throw, just return early
           }
 
           // Convert conversation history to Google AI format
