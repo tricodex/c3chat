@@ -97,7 +97,7 @@ export function ChatView() {
   const handleSubmit = async (content: string) => {
     if (!selectedThread || !content.trim()) return;
 
-    const apiKey = getStoredApiKey(selectedProvider);
+    const apiKey = await getStoredApiKey(selectedProvider);
     if (!apiKey) {
       const provider = AI_PROVIDERS[selectedProvider];
       const providerName = provider?.name || selectedProvider;

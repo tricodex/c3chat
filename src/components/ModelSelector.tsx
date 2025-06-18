@@ -13,7 +13,8 @@ import {
   setPreferredModel,
   formatPricing,
   formatContextLength,
-  getProvidersByCategory
+  getProvidersByCategory,
+  migrateApiKeys
 } from '../lib/ai-providers';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -134,22 +135,39 @@ export function ModelSelector({
   const [apiKey, setApiKey] = useState('');
   const [pendingProvider, setPendingProvider] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasValidKeys, setHasValidKeys] = useState<Record<string, boolean>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Initialize with smart defaults or current selection
   useEffect(() => {
-    if (currentProvider && currentModel) {
-      setSelectedProvider(currentProvider);
-      setSelectedModel(currentModel);
-    } else {
-      // Try to get smart default
-      const defaultSelection = getDefaultProvider();
-      if (defaultSelection) {
-        setSelectedProvider(defaultSelection.providerId);
-        setSelectedModel(defaultSelection.modelId);
-        onSelect(defaultSelection.providerId, defaultSelection.modelId);
+    const initializeDefaults = async () => {
+      // First migrate any existing API keys
+      await migrateApiKeys();
+      
+      if (currentProvider && currentModel) {
+        setSelectedProvider(currentProvider);
+        setSelectedModel(currentModel);
+      } else {
+        // Try to get smart default
+        const defaultSelection = await getDefaultProvider();
+        if (defaultSelection) {
+          setSelectedProvider(defaultSelection.providerId);
+          setSelectedModel(defaultSelection.modelId);
+          onSelect(defaultSelection.providerId, defaultSelection.modelId);
+        }
       }
-    }
+      
+      // Check API key validity for all providers
+      const validKeys: Record<string, boolean> = {};
+      for (const provider of Object.values(AI_PROVIDERS)) {
+        if (provider.requiresApiKey) {
+          validKeys[provider.id] = await hasValidApiKey(provider.id);
+        }
+      }
+      setHasValidKeys(validKeys);
+    };
+    
+    initializeDefaults();
   }, [currentProvider, currentModel]);
 
   // Close dropdown when clicking outside
@@ -167,12 +185,13 @@ export function ModelSelector({
   const provider = selectedProvider ? AI_PROVIDERS[selectedProvider] : null;
   const model = provider?.models.find(m => m.id === selectedModel);
 
-  const handleProviderSelect = (providerId: string) => {
+  const handleProviderSelect = async (providerId: string) => {
     const newProvider = AI_PROVIDERS[providerId];
     if (!newProvider) return;
 
     // Check if provider requires API key
-    if (newProvider.requiresApiKey && !hasValidApiKey(providerId)) {
+    const hasKey = hasValidKeys[providerId] ?? await hasValidApiKey(providerId);
+    if (newProvider.requiresApiKey && !hasKey) {
       setPendingProvider(providerId);
       setShowApiKeyModal(true);
       setShowDropdown(false);
@@ -203,20 +222,27 @@ export function ModelSelector({
     setShowDropdown(false);
   };
 
-  const handleApiKeySave = () => {
+  const handleApiKeySave = async () => {
     if (!apiKey.trim()) {
       toast.error('Please enter an API key');
       return;
     }
 
-    setStoredApiKey(pendingProvider, apiKey.trim());
-    setShowApiKeyModal(false);
-    setApiKey('');
-    toast.success(`${AI_PROVIDERS[pendingProvider]?.name} API key saved!`);
-    
-    // Now set the provider
-    handleProviderSelect(pendingProvider);
-    setPendingProvider('');
+    try {
+      await setStoredApiKey(pendingProvider, apiKey.trim());
+      setShowApiKeyModal(false);
+      setApiKey('');
+      toast.success(`${AI_PROVIDERS[pendingProvider]?.name} API key saved securely!`);
+      
+      // Update valid keys state
+      setHasValidKeys(prev => ({ ...prev, [pendingProvider]: true }));
+      
+      // Now set the provider
+      await handleProviderSelect(pendingProvider);
+      setPendingProvider('');
+    } catch (error) {
+      toast.error('Failed to save API key securely');
+    }
   };
 
   const { featured, popular, others } = getProvidersByCategory();
@@ -372,7 +398,7 @@ function ElaborateDropdown({
               </div>
               {currentProvider.requiresApiKey && (
                 <div className={`w-2 h-2 rounded-full ${
-                  hasValidApiKey(currentProvider.id) ? 'bg-[var(--c3-success)]' : 'bg-[var(--c3-warning)]'
+                  hasValidKeys[currentProvider.id] ? 'bg-[var(--c3-success)]' : 'bg-[var(--c3-warning)]'
                 }`} />
               )}
             </div>
@@ -466,12 +492,12 @@ function ElaborateDropdown({
                 <div className="flex flex-col items-end gap-1">
                   {provider.requiresApiKey && (
                     <div className={`flex items-center gap-1 text-xs ${
-                      hasValidApiKey(provider.id) 
+                      hasValidKeys[provider.id] 
                         ? 'text-[var(--c3-success)]' 
                         : 'text-[var(--c3-warning)]'
                     }`}>
                       <Key className="w-3 h-3" />
-                      {hasValidApiKey(provider.id) ? 'Ready' : 'Key needed'}
+                      {hasValidKeys[provider.id] ? 'Ready' : 'Key needed'}
                     </div>
                   )}
                   {selectedProvider === provider.id && (
@@ -569,12 +595,12 @@ function ProviderCard({
         <div className="flex items-center gap-2">
           {provider.requiresApiKey && (
             <div className={`px-3 py-1 rounded-full text-xs flex items-center gap-1 ${
-              hasValidApiKey(provider.id)
+              hasValidKeys[provider.id]
                 ? 'bg-[var(--c3-success)]/10 text-[var(--c3-success)]'
                 : 'bg-[var(--c3-warning)]/10 text-[var(--c3-warning)]'
             }`}>
               <Key className="w-3 h-3" />
-              {hasValidApiKey(provider.id) ? 'Configured' : 'Key required'}
+              {hasValidKeys[provider.id] ? 'Configured' : 'Key required'}
             </div>
           )}
           <ChevronDown className={`w-5 h-5 text-[var(--c3-text-tertiary)] transition-transform ${
@@ -648,7 +674,7 @@ function ProviderCard({
             ))}
           </div>
 
-          {provider.requiresApiKey && !hasValidApiKey(provider.id) && (
+          {provider.requiresApiKey && !hasValidKeys[provider.id] && (
             <div className="mt-4 p-3 bg-[var(--c3-warning)]/10 border border-[var(--c3-warning)]/20 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

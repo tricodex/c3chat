@@ -649,31 +649,57 @@ export const WEB_SEARCH_PROVIDERS = {
   },
 };
 
+import { secureStorage } from './crypto-utils';
+
 // Storage keys for API keys and preferences
 export const API_KEY_STORAGE_PREFIX = "c3chat_api_key_";
 export const PROVIDER_PREFERENCE_KEY = "c3chat_preferred_provider";
 export const MODEL_PREFERENCE_KEY = "c3chat_preferred_model";
 
-// Helper functions
-export function getStoredApiKey(providerId: string): string | null {
+// Helper functions with encryption
+export async function getStoredApiKey(providerId: string): Promise<string | null> {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(API_KEY_STORAGE_PREFIX + providerId);
+  try {
+    return await secureStorage.getItem(API_KEY_STORAGE_PREFIX + providerId);
+  } catch (error) {
+    console.error('Failed to retrieve API key:', error);
+    return null;
+  }
 }
 
-export function setStoredApiKey(providerId: string, apiKey: string): void {
+export async function setStoredApiKey(providerId: string, apiKey: string): Promise<void> {
   if (typeof window === "undefined") return;
-  localStorage.setItem(API_KEY_STORAGE_PREFIX + providerId, apiKey);
+  try {
+    await secureStorage.setItem(API_KEY_STORAGE_PREFIX + providerId, apiKey);
+  } catch (error) {
+    console.error('Failed to store API key:', error);
+    throw error;
+  }
 }
 
 export function removeStoredApiKey(providerId: string): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(API_KEY_STORAGE_PREFIX + providerId);
+  secureStorage.removeItem(API_KEY_STORAGE_PREFIX + providerId);
 }
 
-// Check if provider has valid API key
-export function hasValidApiKey(providerId: string): boolean {
-  const key = getStoredApiKey(providerId);
+// Check if provider has valid API key (now async)
+export async function hasValidApiKey(providerId: string): Promise<boolean> {
+  const key = await getStoredApiKey(providerId);
   return !!key && key.length > 0;
+}
+
+// Synchronous wrapper for backwards compatibility
+export function getStoredApiKeySync(providerId: string): string | null {
+  if (typeof window === "undefined") return null;
+  // Try to get the encrypted value first
+  const encryptedFlag = localStorage.getItem(API_KEY_STORAGE_PREFIX + providerId + '_encrypted_flag');
+  if (encryptedFlag === 'true') {
+    // If encrypted, we can't decrypt synchronously
+    console.warn('API key is encrypted, use getStoredApiKey() instead');
+    return null;
+  }
+  // Fall back to plain text
+  return localStorage.getItem(API_KEY_STORAGE_PREFIX + providerId);
 }
 
 // Get/Set provider preferences
@@ -697,15 +723,15 @@ export function setPreferredModel(providerId: string, modelId: string): void {
   localStorage.setItem(`${MODEL_PREFERENCE_KEY}_${providerId}`, modelId);
 }
 
-// Smart provider selection logic
-export function getDefaultProvider(): { providerId: string; modelId: string } | null {
+// Smart provider selection logic (async version)
+export async function getDefaultProvider(): Promise<{ providerId: string; modelId: string } | null> {
   // First check user preference
   const preferredProvider = getPreferredProvider();
   if (preferredProvider && AI_PROVIDERS[preferredProvider]) {
     const provider = AI_PROVIDERS[preferredProvider];
     
     // Check if user has API key for preferred provider
-    if (!provider.requiresApiKey || hasValidApiKey(preferredProvider)) {
+    if (!provider.requiresApiKey || await hasValidApiKey(preferredProvider)) {
       const preferredModel = getPreferredModel(preferredProvider);
       const defaultModel = preferredModel || 
         provider.models.find(m => m.recommended)?.id || 
@@ -719,7 +745,7 @@ export function getDefaultProvider(): { providerId: string; modelId: string } | 
 
   // Look for providers with existing API keys
   for (const provider of Object.values(AI_PROVIDERS)) {
-    if (provider.requiresApiKey && hasValidApiKey(provider.id)) {
+    if (provider.requiresApiKey && await hasValidApiKey(provider.id)) {
       const defaultModel = provider.models.find(m => m.recommended)?.id || provider.models[0]?.id;
       if (defaultModel) {
         return { providerId: provider.id, modelId: defaultModel };
@@ -728,6 +754,30 @@ export function getDefaultProvider(): { providerId: string; modelId: string } | 
   }
 
   // No provider with API key found - don't auto-select
+  return null;
+}
+
+// Synchronous version for backwards compatibility (less secure)
+export function getDefaultProviderSync(): { providerId: string; modelId: string } | null {
+  // First check user preference
+  const preferredProvider = getPreferredProvider();
+  if (preferredProvider && AI_PROVIDERS[preferredProvider]) {
+    const provider = AI_PROVIDERS[preferredProvider];
+    
+    // For sync version, we can't check encrypted keys
+    if (!provider.requiresApiKey) {
+      const preferredModel = getPreferredModel(preferredProvider);
+      const defaultModel = preferredModel || 
+        provider.models.find(m => m.recommended)?.id || 
+        provider.models[0]?.id;
+      
+      if (defaultModel) {
+        return { providerId: preferredProvider, modelId: defaultModel };
+      }
+    }
+  }
+
+  // No provider found - don't auto-select
   return null;
 }
 
@@ -754,6 +804,29 @@ export function getRecommendedModels(): Array<{ provider: AIProvider; model: AIM
     const bPrice = b.model.pricing?.inputPer1M || 0;
     return aPrice - bPrice;
   });
+}
+
+// Migrate existing plain text API keys to encrypted storage
+export async function migrateApiKeys(): Promise<void> {
+  if (typeof window === "undefined") return;
+  
+  try {
+    // Migrate all provider API keys
+    for (const provider of Object.values(AI_PROVIDERS)) {
+      const key = API_KEY_STORAGE_PREFIX + provider.id;
+      await secureStorage.migrateKey(key);
+      
+      // Also check for the old format used in Settings component
+      const oldKey = `apiKey_${provider.id}`;
+      const oldValue = localStorage.getItem(oldKey);
+      if (oldValue) {
+        await setStoredApiKey(provider.id, oldValue);
+        localStorage.removeItem(oldKey);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to migrate API keys:', error);
+  }
 }
 
 // Provider categorization

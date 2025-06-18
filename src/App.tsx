@@ -10,6 +10,7 @@ import { WelcomeScreen } from "./components/WelcomeScreen";
 import { Header } from "./components/Header";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CommandPalette } from "./components/CommandPalette";
+import { SecurityInitializer } from "./components/SecurityInitializer";
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -29,20 +30,22 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div id="root">
-        <Toaster 
-          position="top-center"
-          toastOptions={{
-            style: {
-              background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
-              color: 'var(--c3-text-primary)',
-              border: '1px solid var(--c3-border-subtle)',
-              borderRadius: 'var(--c3-radius-lg)',
-            },
-          }}
-        />
-        <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      </div>
+      <SecurityInitializer>
+        <div id="root">
+          <Toaster 
+            position="top-center"
+            toastOptions={{
+              style: {
+                background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
+                color: 'var(--c3-text-primary)',
+                border: '1px solid var(--c3-border-subtle)',
+                borderRadius: 'var(--c3-radius-lg)',
+              },
+            }}
+          />
+          <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        </div>
+      </SecurityInitializer>
     </ErrorBoundary>
   );
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
-import { AI_PROVIDERS, COMPANY_LOGOS } from '../lib/ai-providers';
+import { AI_PROVIDERS, COMPANY_LOGOS, getStoredApiKey, setStoredApiKey, removeStoredApiKey, migrateApiKeys } from '../lib/ai-providers';
 import { toast } from 'sonner';
 import { Key, Settings as SettingsIcon, Info, X } from 'lucide-react';
 import { 
@@ -117,38 +117,45 @@ export function Settings({ isOpen, onClose }: SettingsModalProps) {
     }
   }, [isOpen]);
 
-  const loadSettings = () => {
-    // Load API keys from localStorage
+  const loadSettings = async () => {
+    // First migrate any old API keys
+    await migrateApiKeys();
+    
+    // Load API keys using secure storage
     const storedKeys: Record<string, string> = {};
-    Object.values(AI_PROVIDERS).forEach(provider => {
-      const key = localStorage.getItem(`apiKey_${provider.id}`);
+    for (const provider of Object.values(AI_PROVIDERS)) {
+      const key = await getStoredApiKey(provider.id);
       if (key) storedKeys[provider.id] = key;
-    });
+    }
     setApiKeys(storedKeys);
 
     // Load default provider
-    const preferred = localStorage.getItem('preferredProvider') || '';
+    const preferred = localStorage.getItem('c3chat_preferred_provider') || '';
     setDefaultProvider(preferred);
   };
 
-  const handleSaveApiKey = (providerId: string, apiKey: string) => {
-    if (apiKey.trim()) {
-      localStorage.setItem(`apiKey_${providerId}`, apiKey.trim());
-      setApiKeys(prev => ({ ...prev, [providerId]: apiKey.trim() }));
-      toast.success(`API key saved for ${AI_PROVIDERS[providerId]?.name}`);
-    } else {
-      localStorage.removeItem(`apiKey_${providerId}`);
-      setApiKeys(prev => {
-        const newKeys = { ...prev };
-        delete newKeys[providerId];
-        return newKeys;
-      });
-      toast.success(`API key removed for ${AI_PROVIDERS[providerId]?.name}`);
+  const handleSaveApiKey = async (providerId: string, apiKey: string) => {
+    try {
+      if (apiKey.trim()) {
+        await setStoredApiKey(providerId, apiKey.trim());
+        setApiKeys(prev => ({ ...prev, [providerId]: apiKey.trim() }));
+        toast.success(`API key saved securely for ${AI_PROVIDERS[providerId]?.name}`);
+      } else {
+        removeStoredApiKey(providerId);
+        setApiKeys(prev => {
+          const newKeys = { ...prev };
+          delete newKeys[providerId];
+          return newKeys;
+        });
+        toast.success(`API key removed for ${AI_PROVIDERS[providerId]?.name}`);
+      }
+    } catch (error) {
+      toast.error('Failed to save API key securely');
     }
   };
 
   const handleSetDefaultProvider = (providerId: string) => {
-    localStorage.setItem('preferredProvider', providerId);
+    localStorage.setItem('c3chat_preferred_provider', providerId);
     setDefaultProvider(providerId);
     toast.success(`Default provider set to ${AI_PROVIDERS[providerId]?.name}`);
   };
@@ -158,11 +165,11 @@ export function Settings({ isOpen, onClose }: SettingsModalProps) {
       setIsLoading(true);
       try {
         // Clear API keys
-        Object.keys(AI_PROVIDERS).forEach(providerId => {
-          localStorage.removeItem(`apiKey_${providerId}`);
-        });
-        localStorage.removeItem('preferredProvider');
-        localStorage.removeItem('preferredModel');
+        for (const providerId of Object.keys(AI_PROVIDERS)) {
+          removeStoredApiKey(providerId);
+        }
+        localStorage.removeItem('c3chat_preferred_provider');
+        localStorage.removeItem('c3chat_preferred_model');
 
         setApiKeys({});
         setDefaultProvider('');
