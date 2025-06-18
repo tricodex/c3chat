@@ -418,10 +418,28 @@ export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
   if (!threadId) return [];
   
+  // Only log when there's a mismatch or issue
+  const viewportCount = state.currentViewport?.messages.length || 0;
+  const memoryCount = state.messages[threadId]?.length || 0;
+  
+  if (viewportCount !== memoryCount && state.currentViewport?.threadId === threadId) {
+    console.log('📋 Message count mismatch:', {
+      threadId,
+      viewportCount,
+      memoryCount,
+    });
+  }
+  
   // CRITICAL: Check if viewport is loaded and matches thread
   if (state.currentViewport && 
-      state.currentViewport.threadId === threadId &&
-      state.currentViewport.messages.length > 0) {
+      state.currentViewport.threadId === threadId) {
+    
+    // If viewport has no messages but memory has messages, viewport is stale
+    if (state.currentViewport.messages.length === 0 && 
+        state.messages[threadId]?.length > 0) {
+      console.warn('⚠️ Viewport is empty but memory has messages, using memory messages');
+      return state.messages[threadId] || [];
+    }
     
     // Convert cached messages to Message type
     return state.currentViewport.messages.map(cached => ({
@@ -447,7 +465,9 @@ export const useMessages = (threadId?: string): Message[] => {
   // FALLBACK: Only use memory if viewport not ready
   // This should be temporary during initial load
   console.warn(`Viewport not ready for thread ${threadId}, using memory messages`);
-  return state.messages[threadId] || [];
+  const memoryMessages = state.messages[threadId] || [];
+  console.log(`📚 Memory messages for thread ${threadId}:`, memoryMessages.length);
+  return memoryMessages;
 };
 
 export const useSelectedThread = () => {
@@ -498,7 +518,13 @@ export const useActiveUsers = (threadId: string): string[] => {
 // Provider component
 export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(syncReducer, initialState);
-  const redisCache = useRef<RedisCache>(getRedisCache());
+  const redisCache = useRef<RedisCache | null>(null);
+  
+  // Initialize Redis cache lazily to ensure environment variables are loaded
+  if (!redisCache.current) {
+    console.log('🔄 Initializing Redis cache in scalable sync engine');
+    redisCache.current = getRedisCache();
+  }
   const circuitBreaker = useRef(new CircuitBreaker());
   const networkMonitor = useRef(new NetworkMonitor());
   const crossTabSync = useRef<CrossTabSync>(getCrossTabSync());
@@ -566,7 +592,16 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         if (threadId && isRedisEnabled) {
           try {
+            console.log('🎯 Loading viewport for selected thread:', threadId);
             const viewport = await redisCache.current.getViewport(threadId);
+            console.log('📊 Viewport loaded in selectThread:', {
+              threadId: viewport.threadId,
+              messageCount: viewport.messages.length,
+              hasMoreTop: viewport.hasMore.top,
+              hasMoreBottom: viewport.hasMore.bottom,
+            });
+            
+            // Always set viewport, even if empty (to clear previous thread's viewport)
             dispatch({ type: 'SET_VIEWPORT', payload: viewport });
           } catch (error) {
             console.error('Failed to load viewport from Redis:', error);
@@ -657,6 +692,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Refresh viewport after sending message if Redis is enabled
         if (isRedisEnabled) {
           try {
+            // Clear viewport cache to force fresh load
+            dispatch({ type: 'SET_VIEWPORT', payload: null });
+            
+            // Small delay to ensure message is synced
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
             const viewport = await redisCache.current.getViewport(threadId);
             dispatch({ type: 'SET_VIEWPORT', payload: viewport });
           } catch (error) {
@@ -834,6 +875,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       // Sync to Redis if enabled and update viewport
       if (isRedisEnabled) {
+        console.log('🔄 Syncing messages to Redis:', {
+          threadId: state.selectedThreadId,
+          messageCount: convexMessages.length,
+        });
+        
         redisCache.current.syncMessages(
           state.selectedThreadId,
           convexMessages.map(msg => ({
@@ -851,13 +897,34 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             },
           }))
         ).then(async () => {
+          // Clear viewport first to force fresh load
+          dispatch({ type: 'SET_VIEWPORT', payload: null });
+          
+          // Small delay to ensure Redis sync is complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
           // Update viewport with fresh data
           try {
+            console.log('📖 Loading viewport from Redis for thread:', state.selectedThreadId);
             const viewport = await redisCache.current.getViewport(state.selectedThreadId);
+            console.log('✅ Viewport loaded:', {
+              threadId: viewport.threadId,
+              messageCount: viewport.messages.length,
+              hasMoreTop: viewport.hasMore.top,
+              hasMoreBottom: viewport.hasMore.bottom,
+            });
+            
+            // Always set viewport even if empty (it means the thread is truly empty)
             dispatch({ type: 'SET_VIEWPORT', payload: viewport });
           } catch (error) {
             console.error('Failed to update viewport after syncing messages:', error);
+            // On error, fall back to memory messages
+            dispatch({ type: 'SET_VIEWPORT', payload: null });
           }
+        }).catch(error => {
+          console.error('❌ Failed to sync messages to Redis:', error);
+          // On error, clear viewport to fall back to memory
+          dispatch({ type: 'SET_VIEWPORT', payload: null });
         });
       }
     }

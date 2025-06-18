@@ -4,6 +4,9 @@ import { ConvexReactClient } from "convex/react";
 import "./index.css";
 import App from "./App";
 
+// Initialize Redis environment fix early
+import "./lib/redis-init-fix";
+
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(

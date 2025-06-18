@@ -29,6 +29,11 @@ const getRedis = (): Redis => {
     const url = import.meta.env.VITE_KV_REST_API_URL;
     const token = import.meta.env.VITE_KV_REST_API_TOKEN;
     
+    console.log('🔑 getRedis - Creating Redis instance:', {
+      hasUrl: !!url,
+      hasToken: !!token,
+    });
+    
     if (!url || !token) {
       throw new Error("Redis configuration missing. Please set VITE_KV_REST_API_URL and VITE_KV_REST_API_TOKEN in your .env.local file");
     }
@@ -37,6 +42,8 @@ const getRedis = (): Redis => {
       url,
       token,
     });
+    
+    console.log('✅ Redis instance created successfully');
   }
   return redis;
 };
@@ -144,8 +151,10 @@ export class RedisCache {
     }
     
     try {
+      const key = Keys.messages(threadId);
+      
       // Get message count for pagination
-      const messageCount = await getRedis().zcard(Keys.messages(threadId));
+      const messageCount = await getRedis().zcard(key);
       
       let messages: CachedMessage[];
       let startCursor: string | null = null;
@@ -154,10 +163,14 @@ export class RedisCache {
       if (anchor === 'bottom') {
         // Get latest messages
         const rawMessages = await getRedis().zrange(
-          Keys.messages(threadId),
+          key,
           -VIEWPORT_SIZE,
           -1
         );
+        console.log('📥 Raw messages from Redis:', {
+          count: rawMessages?.length || 0,
+          firstMessage: rawMessages?.[0],
+        });
         messages = (rawMessages || []).map(item => 
           typeof item === 'string' ? JSON.parse(item) : item
         ) as CachedMessage[];
@@ -466,34 +479,54 @@ export class RedisCache {
   
   // Batch operations for sync
   async syncMessages(threadId: string, messages: CachedMessage[]): Promise<void> {
+    console.log('🔄 syncMessages called:', {
+      threadId,
+      messageCount: messages.length,
+      firstMessage: messages[0],
+      lastMessage: messages[messages.length - 1]
+    });
+    
     if (messages.length === 0) return;
     
     try {
-      // Use pipeline for efficiency
-      const pipeline = getRedis().pipeline();
-      
-      // Clear existing messages
-      pipeline.del(Keys.messages(threadId));
-      
-      // Add all messages with scores
-      const members = messages.map(msg => ({
-        score: msg.timestamp,
-        member: JSON.stringify(msg),
-      }));
-      
-      // Batch add (Redis supports up to 1000 items per zadd)
-      for (let i = 0; i < members.length; i += 500) {
-        const batch = members.slice(i, i + 500);
-        // Add each member individually to the pipeline
-        batch.forEach(({ score, member }) => {
-          pipeline.zadd(Keys.messages(threadId), { score, member });
-        });
+      // Clear the viewport cache first to force fresh load
+      if (this.memoryCache.has(threadId)) {
+        console.log('🧹 Clearing viewport cache for thread:', threadId);
+        this.memoryCache.delete(threadId);
       }
       
-      // Set expiry
-      pipeline.expire(Keys.messages(threadId), CACHE_TTL);
-      
-      await pipeline.exec();
+      // Use direct Redis commands instead of pipeline for reliability
+      try {
+        // Clear existing messages
+        await getRedis().del(Keys.messages(threadId));
+        
+        // Add all messages with scores
+        const members = messages.map(msg => ({
+          score: msg.timestamp,
+          member: JSON.stringify(msg),
+        }));
+        
+        // Batch add (Redis supports up to 1000 items per zadd)
+        for (let i = 0; i < members.length; i += 100) {
+          const batch = members.slice(i, i + 100);
+          
+          // Create zadd arguments
+          const zaddArgs: Record<string, number> = {};
+          batch.forEach(({ score, member }) => {
+            zaddArgs[member] = score;
+          });
+          
+          await getRedis().zadd(Keys.messages(threadId), zaddArgs);
+        }
+        
+        // Set expiry
+        await getRedis().expire(Keys.messages(threadId), CACHE_TTL);
+        
+        console.log('✅ Messages synced to Redis successfully');
+      } catch (error) {
+        console.error('❌ Failed to sync messages to Redis:', error);
+        throw error;
+      }
       
       // Update viewport if it's the current thread
       if (this.memoryCache.has(threadId)) {
@@ -663,20 +696,38 @@ export class RedisCache {
 const isRedisConfigured = (): boolean => {
   const url = import.meta.env.VITE_KV_REST_API_URL;
   const token = import.meta.env.VITE_KV_REST_API_TOKEN;
+  console.log('🔧 Redis configuration check:', {
+    hasUrl: !!url,
+    hasToken: !!token,
+    url: url ? '✅ Configured' : '❌ Missing',
+    token: token ? '✅ Configured' : '❌ Missing',
+  });
   return !!(url && token);
 };
 
 // Singleton instance
 let cacheInstance: RedisCache | null = null;
+let isNoOp = false;
 
 export function getRedisCache(): RedisCache {
+  // Always check if we need to upgrade from NoOp to real Redis
+  if (cacheInstance && isNoOp && isRedisConfigured()) {
+    console.log('🔄 Upgrading from NoOp to real Redis cache');
+    cacheInstance = null;
+    isNoOp = false;
+  }
+  
   if (!cacheInstance) {
     if (!isRedisConfigured()) {
       console.warn('Redis not configured. Using no-op cache implementation.');
-      // Return a no-op implementation if Redis is not configured
-      return new NoOpRedisCache() as any;
+      // Create a singleton NoOpRedisCache
+      cacheInstance = new NoOpRedisCache() as any;
+      isNoOp = true;
+    } else {
+      console.log('✅ Creating Redis cache instance');
+      cacheInstance = new RedisCache();
+      isNoOp = false;
     }
-    cacheInstance = new RedisCache();
   }
   return cacheInstance;
 }
@@ -691,8 +742,7 @@ class NoOpRedisCache {
       messages: [],
       startCursor: null,
       endCursor: null,
-      hasMore: { up: false, down: false },
-      totalMessages: 0,
+      hasMore: { top: false, bottom: false },
     };
   }
   async loadMore(): Promise<CachedMessage[]> { return []; }

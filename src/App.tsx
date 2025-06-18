@@ -12,10 +12,13 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CommandPalette } from "./components/CommandPalette";
 import { SecurityInitializer } from "./components/SecurityInitializer";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
+import { DebugPanel } from "./components/DebugPanel";
 
 // Import Redis monitor in development
 if (import.meta.env.DEV) {
   import('./lib/redis-monitor');
+  import('./lib/debug-env');
+  import('./lib/redis-cache-debug');
 }
 
 export default function App() {
@@ -83,6 +86,7 @@ function Content({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
       <Authenticated>
         <ErrorBoundary>
           <EnhancedSyncProvider>
+            <DebugPanel />
             <CommandPalette theme={theme} setTheme={setTheme} />
             <Routes>
               <Route path="/" element={
