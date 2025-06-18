@@ -19,12 +19,6 @@ export function ChatView() {
   const selectedThread = useSelectedThread();
   const messages = useMessages(selectedThread?._id);
   
-  // Debug logging - only log on significant changes
-  useEffect(() => {
-    if (messages.length > 0) {
-      console.log(`📨 ChatView: Thread ${selectedThread?._id} has ${messages.length} messages`);
-    }
-  }, [messages.length, selectedThread?._id]);
   
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);

@@ -417,28 +417,24 @@ export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
   if (!threadId) return [];
   
-  // Always use in-memory messages for now to fix real-time updates
-  // TODO: Fix viewport caching to properly update on new messages
-  const memoryMessages = state.messages[threadId] || [];
-  console.log(`📚 useMessages: Returning ${memoryMessages.length} messages from memory for thread ${threadId}`);
-  return memoryMessages;
+  // If using Redis viewport
+  if (state.currentViewport && state.currentViewport.threadId === threadId) {
+    const viewportMessages = state.currentViewport.messages.map(cached => ({
+      _id: cached._id as Id<"messages">,
+      threadId: cached.threadId as Id<"threads">,
+      role: cached.role,
+      content: cached.content,
+      isOptimistic: cached.isOptimistic,
+      _creationTime: cached.timestamp,
+      createdAt: cached.timestamp,
+      ...cached.metadata,
+    }));
+    return viewportMessages;
+  }
   
-  // Disabled viewport temporarily - it's not updating properly with new messages
-  // // If using Redis viewport
-  // if (state.currentViewport && state.currentViewport.threadId === threadId) {
-  //   const viewportMessages = state.currentViewport.messages.map(cached => ({
-  //     _id: cached._id as Id<"messages">,
-  //     threadId: cached.threadId as Id<"threads">,
-  //     role: cached.role,
-  //     content: cached.content,
-  //     isOptimistic: cached.isOptimistic,
-  //     _creationTime: cached.timestamp,
-  //     createdAt: cached.timestamp,
-  //     ...cached.metadata,
-  //   }));
-  //   console.log(`📚 useMessages: Returning ${viewportMessages.length} messages from Redis viewport`);
-  //   return viewportMessages;
-  // }
+  // Fallback to in-memory messages
+  const memoryMessages = state.messages[threadId] || [];
+  return memoryMessages;
 };
 
 export const useSelectedThread = () => {
@@ -516,8 +512,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   const createBranchMutation = useMutation(api.threads.createBranch);
   const shareThreadMutation = useMutation(api.threads.share);
-  const exportThreadAction = useAction(api.threads.export);
-  const sendMessageWithContext = useAction(api.messages.sendWithContext);
+  const exportThreadAction = useAction(api.threads.exportThread);
+  const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
   
   // Enable Redis if configured
   const isRedisEnabled = import.meta.env.VITE_ENABLE_REDIS_CACHE === 'true';
@@ -525,15 +521,32 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Actions implementation
   const actions = useCallback(() => ({
     selectThread: async (threadId: string | null) => {
-      dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId || '' });
-      dispatch({ type: 'SELECT_THREAD', payload: threadId });
+      // Acquire lock to prevent race conditions during thread switch
+      const lockKey = `thread_switch_${state.selectedThreadId || 'none'}_to_${threadId || 'none'}`;
+      let lockAcquired = false;
       
-      if (threadId && isRedisEnabled) {
-        try {
-          const viewport = await redisCache.current.getViewport(threadId);
-          dispatch({ type: 'SET_VIEWPORT', payload: viewport });
-        } catch (error) {
-          console.error('Failed to load viewport from Redis:', error);
+      if (isRedisEnabled) {
+        lockAcquired = await redisCache.current.acquireLock(lockKey, 5000);
+        if (!lockAcquired) {
+          console.warn('Could not acquire lock for thread switch, proceeding anyway');
+        }
+      }
+      
+      try {
+        dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId || '' });
+        dispatch({ type: 'SELECT_THREAD', payload: threadId });
+        
+        if (threadId && isRedisEnabled) {
+          try {
+            const viewport = await redisCache.current.getViewport(threadId);
+            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+          } catch (error) {
+            console.error('Failed to load viewport from Redis:', error);
+          }
+        }
+      } finally {
+        if (lockAcquired && isRedisEnabled) {
+          await redisCache.current.releaseLock(lockKey);
         }
       }
     },
@@ -681,11 +694,25 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     },
     
     sendMessageWithSearch: async (content: string, threadId: string, provider: string, model: string, apiKey: string, searchQueries: string[], attachmentIds: string[], agentId?: string) => {
-      // Note: sendMessageWithContext action doesn't exist in current implementation
-      // This would need to be implemented in convex/messages.ts
-      console.warn('sendMessageWithSearch not implemented in current backend');
-      // For now, just send a regular message
-      await actions().sendMessage(content, threadId, provider, model, apiKey, attachmentIds, agentId);
+      try {
+        const result = await sendMessageWithContext({
+          threadId: threadId as Id<"threads">,
+          content,
+          provider,
+          model,
+          apiKey,
+          attachmentIds: attachmentIds as Id<"attachments">[],
+          enableWebSearch: true,
+          searchQueries,
+        });
+        
+        if (result.success) {
+          console.log('Message sent with web search:', result.searchResults?.length || 0, 'results');
+        }
+      } catch (error) {
+        console.error('Failed to send message with search:', error);
+        throw error;
+      }
     },
     
     sendSystemMessage: async (content: string, threadId: string) => {
@@ -730,13 +757,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
-      console.log(`🔄 Syncing ${convexMessages.length} messages from Convex for thread ${state.selectedThreadId}`);
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: {
         threadId: state.selectedThreadId,
         messages: convexMessages,
       }});
       
-      // Sync to Redis if enabled
+      // Sync to Redis if enabled and update viewport
       if (isRedisEnabled) {
         redisCache.current.syncMessages(
           state.selectedThreadId,
@@ -754,7 +780,15 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
               outputTokens: msg.outputTokens,
             },
           }))
-        );
+        ).then(async () => {
+          // Update viewport with fresh data
+          try {
+            const viewport = await redisCache.current.getViewport(state.selectedThreadId);
+            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+          } catch (error) {
+            console.error('Failed to update viewport after syncing messages:', error);
+          }
+        });
       }
     }
   }, [convexMessages, state.selectedThreadId, isRedisEnabled]);
