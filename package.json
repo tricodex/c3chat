@@ -63,12 +63,17 @@
     "typescript-eslint": "^8.24.1",
     "vite": "^6.2.0",
     "vitest": "^3.2.3",
-    "@rollup/rollup-linux-x64-gnu": "^4.28.1"
+    "@rollup/rollup-linux-x64-gnu": "^4.28.1",
+    "lightningcss-linux-x64-gnu": "^1.28.2"
   },
   "trustedDependencies": [
     "@tailwindcss/oxide"
   ],
   "overrides": {
     "rollup": "4.28.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.28.1",
+    "lightningcss-linux-x64-gnu": "^1.28.2"
   }
 }
