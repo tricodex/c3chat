@@ -987,8 +987,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Advanced actions from AI module
   const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
-  const generateImageAction = useAction(api["ai-media"].generateImage);
-  const generateVideoAction = useAction(api["ai-media"].generateVideo);
+  const generateImageAction = useAction(api.aiMedia.generateImage);
+  const generateVideoAction = useAction(api.aiMedia.generateVideo);
   const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   
   // Thread actions
@@ -1634,11 +1634,27 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Remove optimistic messages - they'll be replaced by real ones from Convex
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Failed to generate image:', error);
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
-        throw error;
+        
+        // Update the assistant message with the error instead of removing it
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: assistantOptimisticId,
+          updates: {
+            content: `❌ Failed to generate image: ${error.message || 'Unknown error'}`,
+            isStreaming: false,
+            isOptimistic: true,
+          }
+        }});
+        
+        // Keep the user message but mark it as failed
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: userOptimisticId,
+          updates: {
+            isOptimistic: true,
+            error: true,
+          }
+        }});
       }
     },
 
@@ -1709,11 +1725,27 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Remove optimistic messages - they'll be replaced by real ones from Convex
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Failed to generate video:', error);
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
-        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
-        throw error;
+        
+        // Update the assistant message with the error instead of removing it
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: assistantOptimisticId,
+          updates: {
+            content: `❌ Failed to generate video: ${error.message || 'Unknown error'}`,
+            isStreaming: false,
+            isOptimistic: true,
+          }
+        }});
+        
+        // Keep the user message but mark it as failed
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: userOptimisticId,
+          updates: {
+            isOptimistic: true,
+            error: true,
+          }
+        }});
       }
     },
 

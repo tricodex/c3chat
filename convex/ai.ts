@@ -317,6 +317,12 @@ export const generateResponse = action({
 
           const genAI = new GoogleGenAI({ apiKey });
 
+          // Check if this is a media-only generation model
+          const mediaOnlyModels = ['imagen-3.0-generate-002', 'veo-2.0-generate-001'];
+          if (mediaOnlyModels.includes(args.model)) {
+            throw new Error(`Model ${args.model} is for media generation only. Please select a text generation model like gemini-2.5-flash or gemini-2.5-pro.`);
+          }
+
           // Convert conversation history to Google AI format
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system") // Filter out system messages
@@ -662,6 +668,12 @@ export const sendMessage = action({
           if (!apiKey) throw new Error("Google API key required");
 
           const genAI = new GoogleGenAI({ apiKey });
+
+          // Check if this is a media-only generation model
+          const mediaOnlyModels = ['imagen-3.0-generate-002', 'veo-2.0-generate-001'];
+          if (mediaOnlyModels.includes(args.model)) {
+            throw new Error(`Model ${args.model} is for media generation only. Please select a text generation model like gemini-2.5-flash or gemini-2.5-pro.`);
+          }
 
           // Convert conversation history to Google AI format
           const contents = conversationHistory

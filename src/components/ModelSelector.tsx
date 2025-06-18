@@ -214,12 +214,21 @@ export function ModelSelector({
   const handleModelSelect = (modelId: string) => {
     if (!provider) return;
     
+    // Let users select any model - they'll get appropriate error messages when trying to use them
     setSelectedModel(modelId);
     onSelect(selectedProvider, modelId);
     
     // Save preference
     setPreferredModel(selectedProvider, modelId);
     setShowDropdown(false);
+    
+    // Show informational toast for media-only models
+    const model = provider.models.find(m => m.id === modelId);
+    if (model?.type === 'image' && modelId !== 'gemini-2.0-flash-preview-image-generation') {
+      toast.info(`${model.name} selected. Use the /image command to generate images.`);
+    } else if (model?.type === 'video') {
+      toast.info(`${model.name} selected. Use the /video command to generate videos.`);
+    }
   };
 
   const handleApiKeySave = async () => {
@@ -287,6 +296,7 @@ export function ModelSelector({
             onProviderSelect={handleProviderSelect}
             onModelSelect={handleModelSelect}
             onClose={() => setShowDropdown(false)}
+            hasValidKeys={hasValidKeys}
           />
         )}
 
@@ -337,6 +347,7 @@ export function ModelSelector({
                 selectedModel={selectedModel}
                 onProviderSelect={handleProviderSelect}
                 onModelSelect={handleModelSelect}
+                hasValidKeys={hasValidKeys}
               />
             ))}
           </div>
@@ -355,7 +366,8 @@ function ElaborateDropdown({
   setSearchQuery,
   onProviderSelect,
   onModelSelect,
-  onClose
+  onClose,
+  hasValidKeys
 }: {
   providers: AIProvider[];
   selectedProvider: string;
@@ -365,6 +377,7 @@ function ElaborateDropdown({
   onProviderSelect: (id: string) => void;
   onModelSelect: (id: string) => void;
   onClose: () => void;
+  hasValidKeys: Record<string, boolean>;
 }) {
   const currentProvider = selectedProvider ? AI_PROVIDERS[selectedProvider] : null;
   
@@ -421,15 +434,15 @@ function ElaborateDropdown({
                         {model.name}
                       </span>
                       {model.type === 'image' && (
-                        <div className="flex items-center gap-1 text-xs text-[var(--c3-text-muted)]">
+                        <div className="flex items-center gap-1 text-xs text-[var(--c3-warning)]">
                           <Image className="w-3 h-3" />
-                          <span>Image</span>
+                          <span>Image Gen Only</span>
                         </div>
                       )}
                       {model.type === 'video' && (
-                        <div className="flex items-center gap-1 text-xs text-[var(--c3-text-muted)]">
+                        <div className="flex items-center gap-1 text-xs text-[var(--c3-warning)]">
                           <Video className="w-3 h-3" />
-                          <span>Video</span>
+                          <span>Video Gen Only</span>
                         </div>
                       )}
                       {model.recommended && <Sparkles className="w-3 h-3 text-[var(--c3-warning)]" />}
@@ -545,13 +558,15 @@ function ProviderCard({
   isSelected,
   selectedModel,
   onProviderSelect,
-  onModelSelect
+  onModelSelect,
+  hasValidKeys
 }: {
   provider: AIProvider;
   isSelected: boolean;
   selectedModel: string;
   onProviderSelect: (id: string) => void;
   onModelSelect: (id: string) => void;
+  hasValidKeys: Record<string, boolean>;
 }) {
   return (
     <div className={`border rounded-lg overflow-hidden transition-all ${
@@ -650,15 +665,15 @@ function ProviderCard({
                       {model.name}
                     </span>
                     {model.type === 'image' && (
-                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-primary)]/10 text-[var(--c3-primary)] rounded-full flex items-center gap-1">
+                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-warning)]/10 text-[var(--c3-warning)] rounded-full flex items-center gap-1">
                         <Image className="w-3 h-3" />
-                        Image Gen
+                        Image Gen Only
                       </span>
                     )}
                     {model.type === 'video' && (
-                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-electric)]/10 text-[var(--c3-electric)] rounded-full flex items-center gap-1">
+                      <span className="text-xs px-2 py-0.5 bg-[var(--c3-warning)]/10 text-[var(--c3-warning)] rounded-full flex items-center gap-1">
                         <Video className="w-3 h-3" />
-                        Video Gen
+                        Video Gen Only
                       </span>
                     )}
                     {model.recommended && (

@@ -131,13 +131,28 @@ export function ChatView() {
             
             // Check if current provider supports image generation
             const provider = AI_PROVIDERS[selectedProvider];
-            if (!provider?.supportsMediaGeneration) {
-              toast.error(`${provider?.name || selectedProvider} doesn't support image generation. Use Google Gemini with Imagen models.`);
+            if (selectedProvider === "google") {
+              // Check which Google model is selected
+              if (selectedModel === "gemini-2.0-flash-preview-image-generation" || selectedModel === "imagen-3.0-generate-002") {
+                // These models support image generation
+                await actions.generateImage(imagePrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
+                break;
+              } else {
+                // Other Gemini models don't support image generation
+                toast.info("For image generation, select 'Gemini 2.0 Flash Image Gen' or 'Imagen 3', or switch to OpenAI.");
+                setInput(content);
+                return;
+              }
+            } else if (selectedProvider !== "openai") {
+              toast.error(`${provider?.name || selectedProvider} doesn't support image generation. Use OpenAI for DALL-E.`);
               setInput(content);
               return;
             }
             
-            await actions.generateImage(imagePrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
+            // For OpenAI, generate the image
+            if (selectedProvider === "openai") {
+              await actions.generateImage(imagePrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
+            }
             break;
           }
           
@@ -238,8 +253,8 @@ export function ChatView() {
               `• \`/research <topic>\` - Deep research with multiple search queries\n` +
               `• Toggle "Web Search" above to enable search for all messages\n\n` +
               `**🎨 Content Generation**\n` +
-              `• \`/image <prompt>\` - Generate an image with AI (Gemini Imagen)\n` +
-              `• \`/video <prompt>\` - Generate a video with AI (Gemini Veo)\n\n` +
+              `• \`/image <prompt>\` - Generate an image (works with Imagen 3, Gemini Flash Image Gen, or OpenAI)\n` +
+              `• \`/video <prompt>\` - Generate a video (select Veo 2 model first)\n\n` +
               `**💬 Conversation Management**\n` +
               `• \`/branch\` - Create a new conversation branch\n` +
               `• \`/clear\` - Clear all messages in this thread\n` +
