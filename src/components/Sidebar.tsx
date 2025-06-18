@@ -97,13 +97,14 @@ export function Sidebar({
         <div className="pl-4 pr-4 py-6 border-b border-[var(--c3-border-subtle)]">
           <div className="flex items-center justify-between mb-4">
             <div className="flex-1">
-              <h1 className="text-xl font-normal text-[var(--c3-text-primary)] tracking-wide" 
+              <h1 className="text-xl font-normal text-[var(--c3-text-primary)] tracking-wide flex items-center gap-2" 
                   style={{ 
                     fontFamily: 'var(--c3-font-mono)', 
                     fontWeight: '400',
                     letterSpacing: '0.1em'
                   }}>
-                C3CHAT
+                <img src="/logo.png" alt="C3" className="w-6 h-6 rounded" />
+                CHAT
               </h1>
               <p className="text-[11px] font-medium mt-1" style={{ color: 'var(--c3-text-tertiary)' }}>
                 {threads.length} conversation{threads.length !== 1 ? 's' : ''}

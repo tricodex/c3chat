@@ -20,6 +20,7 @@ import { Id } from '../../convex/_generated/dataModel';
 import { RedisCache, CachedMessage, CachedThread, ViewportCache, getRedisCache } from './redis-cache';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
+import { getCrossTabSync, CrossTabSync } from './cross-tab-sync';
 
 // Default AI provider configuration (matching old engine)
 const DEFAULT_PROVIDER = "google";
@@ -485,6 +486,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const redisCache = useRef<RedisCache>(getRedisCache());
   const circuitBreaker = useRef(new CircuitBreaker());
   const networkMonitor = useRef(new NetworkMonitor());
+  const crossTabSync = useRef<CrossTabSync>(getCrossTabSync());
   
   // Convex hooks
   const convexThreads = useQuery(api.threads.list);
@@ -519,6 +521,9 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     selectThread: async (threadId: string | null) => {
       dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId || '' });
       dispatch({ type: 'SELECT_THREAD', payload: threadId });
+      
+      // Persist thread selection across tabs
+      crossTabSync.current.setSelectedThread(threadId);
       
       if (threadId && isRedisEnabled) {
         try {
