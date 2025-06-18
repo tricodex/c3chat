@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
 
 # Editor directories and files
 .vscode/*
@@ -29,3 +31,4 @@ package-lock.json
 
 # YoYo AI version control directory
 .yoyo/
+.vercel
