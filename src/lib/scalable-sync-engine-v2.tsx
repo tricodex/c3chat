@@ -13,7 +13,7 @@
  * - Distributed locks for race prevention
  */
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
@@ -417,22 +417,28 @@ export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
   if (!threadId) return [];
   
-  // If using Redis viewport
-  if (state.currentViewport && state.currentViewport.threadId === threadId) {
-    return state.currentViewport.messages.map(cached => ({
-      _id: cached._id as Id<"messages">,
-      threadId: cached.threadId as Id<"threads">,
-      role: cached.role,
-      content: cached.content,
-      isOptimistic: cached.isOptimistic,
-      _creationTime: cached.timestamp,
-      createdAt: cached.timestamp,
-      ...cached.metadata,
-    }));
-  }
+  // Always use in-memory messages for now to fix real-time updates
+  // TODO: Fix viewport caching to properly update on new messages
+  const memoryMessages = state.messages[threadId] || [];
+  console.log(`📚 useMessages: Returning ${memoryMessages.length} messages from memory for thread ${threadId}`);
+  return memoryMessages;
   
-  // Fallback to in-memory messages
-  return state.messages[threadId] || [];
+  // Disabled viewport temporarily - it's not updating properly with new messages
+  // // If using Redis viewport
+  // if (state.currentViewport && state.currentViewport.threadId === threadId) {
+  //   const viewportMessages = state.currentViewport.messages.map(cached => ({
+  //     _id: cached._id as Id<"messages">,
+  //     threadId: cached.threadId as Id<"threads">,
+  //     role: cached.role,
+  //     content: cached.content,
+  //     isOptimistic: cached.isOptimistic,
+  //     _creationTime: cached.timestamp,
+  //     createdAt: cached.timestamp,
+  //     ...cached.metadata,
+  //   }));
+  //   console.log(`📚 useMessages: Returning ${viewportMessages.length} messages from Redis viewport`);
+  //   return viewportMessages;
+  // }
 };
 
 export const useSelectedThread = () => {
@@ -522,9 +528,6 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       dispatch({ type: 'CLEAR_THREAD_MESSAGES', payload: state.selectedThreadId || '' });
       dispatch({ type: 'SELECT_THREAD', payload: threadId });
       
-      // Persist thread selection across tabs
-      crossTabSync.current.setSelectedThread(threadId);
-      
       if (threadId && isRedisEnabled) {
         try {
           const viewport = await redisCache.current.getViewport(threadId);
@@ -609,6 +612,16 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
         
         dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: optimisticId });
+        
+        // Refresh viewport after sending message if Redis is enabled
+        if (isRedisEnabled) {
+          try {
+            const viewport = await redisCache.current.getViewport(threadId);
+            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+          } catch (error) {
+            console.error('Failed to refresh viewport after sending message:', error);
+          }
+        }
         
         if (provider && model && apiKey) {
           await generateResponseAction({
@@ -712,19 +725,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (convexThreads) {
       dispatch({ type: 'SET_THREADS_FROM_CONVEX', payload: convexThreads });
-      
-      // Restore selected thread from cross-tab storage on initial load
-      if (!state.selectedThreadId && convexThreads.length > 0) {
-        const savedThreadId = crossTabSync.current.getSelectedThread();
-        if (savedThreadId && convexThreads.some(t => t._id === savedThreadId)) {
-          dispatch({ type: 'SELECT_THREAD', payload: savedThreadId });
-        }
-      }
     }
-  }, [convexThreads, state.selectedThreadId]);
+  }, [convexThreads]);
   
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
+      console.log(`🔄 Syncing ${convexMessages.length} messages from Convex for thread ${state.selectedThreadId}`);
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: {
         threadId: state.selectedThreadId,
         messages: convexMessages,
@@ -753,29 +759,24 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [convexMessages, state.selectedThreadId, isRedisEnabled]);
   
-  // Cross-tab synchronization
+  // Cross-tab data synchronization
   useEffect(() => {
-    // Subscribe to thread selection changes from other tabs
-    const unsubscribe = crossTabSync.current.subscribe('thread_selected', (message) => {
-      const { threadId } = message.payload;
-      
-      // Only update if it's different from our current selection
-      if (threadId !== state.selectedThreadId) {
-        dispatch({ type: 'SELECT_THREAD', payload: threadId });
-        
-        // Load viewport for the new thread if Redis is enabled
-        if (threadId && isRedisEnabled) {
-          redisCache.current.getViewport(threadId).then(viewport => {
-            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
-          }).catch(error => {
-            console.error('Failed to load viewport from Redis:', error);
-          });
-        }
-      }
+    // Subscribe to data changes from other tabs
+    const unsubscribeThreadCreated = crossTabSync.current.subscribe('thread_created', (message) => {
+      // Refresh thread list when a thread is created in another tab
+      // The convex query will automatically update
     });
     
-    return unsubscribe;
-  }, [state.selectedThreadId, isRedisEnabled]);
+    const unsubscribeThreadDeleted = crossTabSync.current.subscribe('thread_deleted', (message) => {
+      // Refresh thread list when a thread is deleted in another tab
+      // The convex query will automatically update
+    });
+    
+    return () => {
+      unsubscribeThreadCreated();
+      unsubscribeThreadDeleted();
+    };
+  }, []);
   
   // Online status monitoring
   useEffect(() => {
@@ -801,10 +802,12 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, [isRedisEnabled]);
   
-  const value: SyncContextValue = {
+  const actionsObject = useMemo(() => actions(), [actions]);
+  
+  const value = useMemo<SyncContextValue>(() => ({
     state,
-    actions: actions(),
-  };
+    actions: actionsObject,
+  }), [state, actionsObject]);
   
   return (
     <SyncContext.Provider value={value}>

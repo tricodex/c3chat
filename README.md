@@ -31,6 +31,7 @@ A modern, feature-rich AI chat application with support for 10+ LLM providers, r
 - 🔍 **Command Palette**: Quick actions with `/` commands
 - 🔐 **Security**: Encrypted key storage, secure auth
 - 📊 **Token Tracking**: Monitor usage and costs
+- 🔗 **URL Routing**: Direct links to specific chats (e.g., `/chat/8b1e049d-d7e8-4a60-8e1f-20d17ff411ba`)
 
 ## 🚀 Quick Start
 
@@ -88,6 +89,14 @@ c3chat/
 └── docs/             # Documentation
 ```
 
+### Key Features
+
+**URL-Based Chat Navigation**
+- Each chat has a unique URL: `/chat/{uuid}`
+- Direct linking to specific conversations
+- Browser back/forward navigation support
+- Shareable chat URLs for collaboration
+
 ## 🔑 Environment Variables
 
 ```bash
@@ -97,7 +106,8 @@ VITE_CONVEX_URL=your-convex-url
 # Optional (for Redis caching)
 VITE_KV_REST_API_URL=your-upstash-url
 VITE_KV_REST_API_TOKEN=your-upstash-token
-VITE_ENABLE_REDIS_CACHE=false
+VITE_ENABLE_REDIS_CACHE=true
+VITE_USE_SCALABLE_SYNC_ENGINE=true
 
 # API keys configured in-app via Settings UI
 ```

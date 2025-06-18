@@ -3,7 +3,7 @@ import { api } from "../convex/_generated/api";
 import { SignInForm } from "./SignInForm";
 import { Toaster } from "sonner";
 import { useState, useEffect } from "react";
-import { EnhancedSyncProvider } from "./lib/sync-engine-switcher";
+import { EnhancedSyncProvider, useEnhancedSync } from "./lib/sync-engine-switcher";
 import { Sidebar } from "./components/Sidebar";
 import { IsolatedChatView } from "./components/IsolatedChatView";
 import { WelcomeScreen } from "./components/WelcomeScreen";
@@ -11,6 +11,7 @@ import { Header } from "./components/Header";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CommandPalette } from "./components/CommandPalette";
 import { SecurityInitializer } from "./components/SecurityInitializer";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -31,20 +32,22 @@ export default function App() {
   return (
     <ErrorBoundary>
       <SecurityInitializer>
-        <div id="root">
-          <Toaster 
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
-                color: 'var(--c3-text-primary)',
-                border: '1px solid var(--c3-border-subtle)',
-                borderRadius: 'var(--c3-radius-lg)',
-              },
-            }}
-          />
-          <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        </div>
+        <BrowserRouter>
+          <div id="root">
+            <Toaster 
+              position="top-center"
+              toastOptions={{
+                style: {
+                  background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
+                  color: 'var(--c3-text-primary)',
+                  border: '1px solid var(--c3-border-subtle)',
+                  borderRadius: 'var(--c3-radius-lg)',
+                },
+              }}
+            />
+            <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+          </div>
+        </BrowserRouter>
       </SecurityInitializer>
     </ErrorBoundary>
   );
@@ -76,12 +79,25 @@ function Content({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
         <ErrorBoundary>
           <EnhancedSyncProvider>
             <CommandPalette theme={theme} setTheme={setTheme} />
-            <AuthenticatedApp 
-              theme={theme} 
-              setTheme={setTheme}
-              sidebarOpen={sidebarOpen}
-              setSidebarOpen={setSidebarOpen}
-            />
+            <Routes>
+              <Route path="/" element={
+                <AuthenticatedApp 
+                  theme={theme} 
+                  setTheme={setTheme}
+                  sidebarOpen={sidebarOpen}
+                  setSidebarOpen={setSidebarOpen}
+                />
+              } />
+              <Route path="/chat/:chatId" element={
+                <AuthenticatedApp 
+                  theme={theme} 
+                  setTheme={setTheme}
+                  sidebarOpen={sidebarOpen}
+                  setSidebarOpen={setSidebarOpen}
+                />
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </EnhancedSyncProvider>
         </ErrorBoundary>
       </Authenticated>
@@ -95,6 +111,18 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }) {
+  // URL-based chat selection
+  const { chatId } = useParams<{ chatId: string }>();
+  const navigate = useNavigate();
+  const { actions, state } = useEnhancedSync();
+  
+  // Handle URL-based thread selection
+  useEffect(() => {
+    if (chatId && chatId !== state.selectedThreadId) {
+      actions.selectThread(chatId);
+    }
+  }, [chatId, state.selectedThreadId, actions]);
+  
   // Desktop sidebar is collapsed when sidebarOpen is false
   // Mobile sidebar is shown as overlay when sidebarOpen is true
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -124,6 +152,11 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
         theme={theme}
         setTheme={setTheme}
         isCollapsed={!isMobile && !sidebarOpen}
+        onThreadSelect={(threadId) => navigate(`/chat/${threadId}`)}
+        onNewChat={async () => {
+          const threadId = await actions.createThread();
+          navigate(`/chat/${threadId}`);
+        }}
       />
       
       {/* Main Content */}
@@ -131,8 +164,6 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         <IsolatedChatView />
       </div>
-      
-      {/* Debug */}
     </div>
   );
 }

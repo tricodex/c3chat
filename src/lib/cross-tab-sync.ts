@@ -8,7 +8,7 @@
 import { Id } from '../../convex/_generated/dataModel';
 
 export interface CrossTabMessage {
-  type: 'thread_selected' | 'thread_created' | 'thread_deleted' | 'state_update';
+  type: 'thread_created' | 'thread_deleted' | 'thread_updated' | 'message_created' | 'message_updated' | 'data_sync';
   payload: any;
   timestamp: number;
   tabId: string;
@@ -18,7 +18,6 @@ export class CrossTabSync {
   private tabId: string;
   private listeners: Map<string, ((message: CrossTabMessage) => void)[]> = new Map();
   private storageKey = 'c3chat_crosstab_sync';
-  private selectedThreadKey = 'c3chat_selected_thread';
   
   constructor() {
     this.tabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -86,22 +85,25 @@ export class CrossTabSync {
     };
   }
   
-  // Thread selection persistence
-  setSelectedThread(threadId: string | null) {
-    if (typeof window === 'undefined') return;
-    
-    if (threadId) {
-      localStorage.setItem(this.selectedThreadKey, threadId);
-      this.broadcast('thread_selected', { threadId });
-    } else {
-      localStorage.removeItem(this.selectedThreadKey);
-      this.broadcast('thread_selected', { threadId: null });
-    }
+  // Data synchronization helpers
+  notifyThreadCreated(threadId: string, thread: any) {
+    this.broadcast('thread_created', { threadId, thread });
   }
   
-  getSelectedThread(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(this.selectedThreadKey);
+  notifyThreadDeleted(threadId: string) {
+    this.broadcast('thread_deleted', { threadId });
+  }
+  
+  notifyThreadUpdated(threadId: string, updates: any) {
+    this.broadcast('thread_updated', { threadId, updates });
+  }
+  
+  notifyMessageCreated(messageId: string, message: any) {
+    this.broadcast('message_created', { messageId, message });
+  }
+  
+  notifyMessageUpdated(messageId: string, updates: any) {
+    this.broadcast('message_updated', { messageId, updates });
   }
   
   // Clean up

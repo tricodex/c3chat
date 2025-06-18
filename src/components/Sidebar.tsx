@@ -9,13 +9,17 @@ export function Sidebar({
   onClose,
   theme,
   setTheme,
-  isCollapsed = false 
+  isCollapsed = false,
+  onThreadSelect,
+  onNewChat
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   isCollapsed?: boolean;
+  onThreadSelect?: (threadId: string) => void;
+  onNewChat?: () => Promise<void>;
 }) {
   const { state, actions } = useEnhancedSync();
   const threads = useThreads();
@@ -30,7 +34,11 @@ export function Sidebar({
     
     setIsCreating(true);
     try {
-      const threadId = await actions.createThread();
+      if (onNewChat) {
+        await onNewChat();
+      } else {
+        const threadId = await actions.createThread();
+      }
       toast.success("New chat created!");
       if (window.innerWidth < 768) {
         onClose();
@@ -45,7 +53,11 @@ export function Sidebar({
 
   const handleSelectThread = async (threadId: string) => {
     try {
-      await actions.selectThread(threadId);
+      if (onThreadSelect) {
+        onThreadSelect(threadId);
+      } else {
+        await actions.selectThread(threadId);
+      }
       if (window.innerWidth < 768) {
         onClose();
       }
