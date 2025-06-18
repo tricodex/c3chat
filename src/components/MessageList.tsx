@@ -1,6 +1,6 @@
 import { RefObject, useState } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import { Message } from "../lib/corrected-sync-engine";
+import { Message } from "../lib/sync-engine-switcher";
 import { Id } from "../../convex/_generated/dataModel";
 import { MessageCircle, Sparkles, Globe, Brain, Bot, User, Hash, Clock, Cpu, MessageSquare, Search, Braces } from "lucide-react";
 import { MessageActions } from "./MessageActions";

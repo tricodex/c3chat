@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Copy, Check, GitBranch, RefreshCw, Edit2 } from "lucide-react";
 import { Tooltip } from "./ui/Tooltip";
-import { useEnhancedSync } from "../lib/corrected-sync-engine";
+import { useEnhancedSync } from "../lib/sync-engine-switcher";
 import { Id } from "../../convex/_generated/dataModel";
 
 interface MessageActionsProps {

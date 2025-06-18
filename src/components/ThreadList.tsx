@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { useEnhancedSync, useThreads, useOnlineStatus, useSyncStatus } from "../lib/corrected-sync-engine";
+import { useEnhancedSync, useThreads, useOnlineStatus, useSyncStatus } from "../lib/sync-engine-switcher";
 import { Settings } from "./Settings";
 import { ModelSelector } from "./ModelSelector";
 import { MessageSquare, Lightbulb, Plus, Settings as SettingsIcon, AlertTriangle, XCircle, Trash2, Save } from "lucide-react";

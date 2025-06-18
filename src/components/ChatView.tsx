@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/corrected-sync-engine";
+import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/sync-engine-switcher";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { EmptyState } from "./EmptyState";

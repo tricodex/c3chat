@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChatView } from "./ChatView";
-import { useEnhancedSync, useSelectedThread, useThreads } from "../lib/corrected-sync-engine";
+import { useEnhancedSync, useSelectedThread, useThreads } from "../lib/sync-engine-switcher";
 import { MessageCircle } from "lucide-react";
 
 /**
@@ -55,7 +55,8 @@ export function IsolatedChatView() {
   }
   
   // Show loading state while thread is being selected
-  if (!currentThreadId || currentThreadId !== selectedThread?._id) {
+  if (state.selectedThreadId && !selectedThread) {
+    // Thread ID is selected but thread data hasn't loaded yet
     return (
       <div className="c3-chat-container flex items-center justify-center">
         <div className="text-center">
@@ -65,6 +66,21 @@ export function IsolatedChatView() {
             <div className="c3-typing-dot" />
           </div>
           <p className="text-sm text-[var(--c3-text-tertiary)] mt-2">Loading thread...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // No thread selected
+  if (!currentThreadId || !selectedThread) {
+    return (
+      <div className="c3-chat-container flex items-center justify-center">
+        <div className="text-center">
+          <MessageCircle className="w-16 h-16 mx-auto mb-4 text-[var(--c3-text-muted)]" />
+          <h2 className="text-xl font-semibold mb-2">Select or create a new chat</h2>
+          <p className="text-sm text-[var(--c3-text-secondary)] mb-6">
+            Start a conversation to begin
+          </p>
         </div>
       </div>
     );

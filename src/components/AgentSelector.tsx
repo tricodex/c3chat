@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ChevronDown, Sparkles, Brain, Check, Microscope, Code2, Palette, BarChart3, GraduationCap, Briefcase, Bot, Lightbulb } from "lucide-react";
 import { AI_AGENTS, AIAgent } from "../lib/ai-agents";
-import { useEnhancedSync } from "../lib/corrected-sync-engine";
+import { useEnhancedSync } from "../lib/sync-engine-switcher";
 import { toast } from "sonner";
 
 // Map icon names to Lucide components

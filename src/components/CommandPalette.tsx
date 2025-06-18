@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Command } from 'cmdk';
-import { useEnhancedSync, useThreads } from '../lib/corrected-sync-engine.tsx';
+import { useEnhancedSync, useThreads } from '../lib/sync-engine-switcher';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { 

@@ -1,4 +1,4 @@
-import { useEnhancedSync, useSelectedThread } from "../lib/corrected-sync-engine";
+import { useEnhancedSync, useSelectedThread } from "../lib/sync-engine-switcher";
 import { ModelSelector } from "./ModelSelector";
 import { SignOutButton } from "../SignOutButton";
 import { Menu, Save, Sparkles, Cloud, CloudOff } from "lucide-react";

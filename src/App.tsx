@@ -3,7 +3,7 @@ import { api } from "../convex/_generated/api";
 import { SignInForm } from "./SignInForm";
 import { Toaster } from "sonner";
 import { useState, useEffect } from "react";
-import { EnhancedSyncProvider } from "./lib/corrected-sync-engine.tsx";
+import { EnhancedSyncProvider } from "./lib/sync-engine-switcher";
 import { Sidebar } from "./components/Sidebar";
 import { IsolatedChatView } from "./components/IsolatedChatView";
 import { WelcomeScreen } from "./components/WelcomeScreen";
@@ -75,6 +75,7 @@ function Content({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
       <Authenticated>
         <ErrorBoundary>
           <EnhancedSyncProvider>
+            <CommandPalette theme={theme} setTheme={setTheme} />
             <AuthenticatedApp 
               theme={theme} 
               setTheme={setTheme}
@@ -108,9 +109,6 @@ function AuthenticatedApp({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
 
   return (
     <div className="c3-layout">
-      {/* Command Palette - accessible from anywhere */}
-      <CommandPalette theme={theme} setTheme={setTheme} />
-      
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (
         <div 

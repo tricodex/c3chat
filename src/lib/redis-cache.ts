@@ -21,11 +21,25 @@
 import { Redis } from "@upstash/redis";
 import { nanoid } from "nanoid";
 
-// Initialize Redis client
-const redis = new Redis({
-  url: import.meta.env.VITE_KV_REST_API_URL,
-  token: import.meta.env.VITE_KV_REST_API_TOKEN,
-});
+// Initialize Redis client conditionally
+let redis: Redis | null = null;
+
+const getRedis = (): Redis => {
+  if (!redis) {
+    const url = import.meta.env.VITE_KV_REST_API_URL;
+    const token = import.meta.env.VITE_KV_REST_API_TOKEN;
+    
+    if (!url || !token) {
+      throw new Error("Redis configuration missing. Please set VITE_KV_REST_API_URL and VITE_KV_REST_API_TOKEN in your .env.local file");
+    }
+    
+    redis = new Redis({
+      url,
+      token,
+    });
+  }
+  return redis;
+};
 
 // Types
 export interface CachedMessage {
@@ -91,7 +105,7 @@ export class RedisCache {
   // Thread operations
   async getThread(threadId: string): Promise<CachedThread | null> {
     try {
-      const cached = await redis.get<CachedThread>(Keys.thread(threadId));
+      const cached = await getRedis().get<CachedThread>(Keys.thread(threadId));
       return cached;
     } catch (error) {
       console.error('Redis getThread error:', error);
@@ -101,10 +115,10 @@ export class RedisCache {
   
   async saveThread(thread: CachedThread): Promise<void> {
     try {
-      await redis.setex(Keys.thread(thread._id), CACHE_TTL, thread);
+      await getRedis().setex(Keys.thread(thread._id), CACHE_TTL, thread);
       
       // Publish update
-      await redis.publish(Keys.channel.thread(thread._id), {
+      await getRedis().publish(Keys.channel.thread(thread._id), {
         type: 'thread_update',
         thread,
         tabId: this.tabId,
@@ -124,7 +138,7 @@ export class RedisCache {
     
     try {
       // Get message count for pagination
-      const messageCount = await redis.zcard(Keys.messages(threadId));
+      const messageCount = await getRedis().zcard(Keys.messages(threadId));
       
       let messages: CachedMessage[];
       let startCursor: string | null = null;
@@ -132,7 +146,7 @@ export class RedisCache {
       
       if (anchor === 'bottom') {
         // Get latest messages
-        const rawMessages = await redis.zrange(
+        const rawMessages = await getRedis().zrange(
           Keys.messages(threadId),
           -VIEWPORT_SIZE,
           -1
@@ -147,7 +161,7 @@ export class RedisCache {
         }
       } else {
         // Get oldest messages
-        const rawMessages = await redis.zrange(
+        const rawMessages = await getRedis().zrange(
           Keys.messages(threadId),
           0,
           VIEWPORT_SIZE - 1
@@ -194,14 +208,14 @@ export class RedisCache {
       const key = Keys.messages(threadId);
       
       // Get cursor score
-      const cursorScore = await redis.zscore(key, cursor);
+      const cursorScore = await getRedis().zscore(key, cursor);
       if (cursorScore === null) return [];
       
       let messages: CachedMessage[];
       
       if (direction === 'up') {
         // Load older messages
-        const rawMessages = await redis.zrangebyscore(
+        const rawMessages = await getRedis().zrangebyscore(
           key,
           '-inf',
           `(${cursorScore}`,
@@ -215,7 +229,7 @@ export class RedisCache {
         ) as CachedMessage[]).reverse();
       } else {
         // Load newer messages
-        const rawMessages = await redis.zrangebyscore(
+        const rawMessages = await getRedis().zrangebyscore(
           key,
           `(${cursorScore}`,
           '+inf',
@@ -259,14 +273,14 @@ export class RedisCache {
     
     try {
       // Store in Redis for cross-tab sync
-      await redis.setex(
+      await getRedis().setex(
         Keys.optimistic(this.tabId),
         60, // 1 minute TTL for optimistic updates
         { message, timestamp: Date.now() }
       );
       
       // Broadcast to other tabs
-      await redis.publish(Keys.channel.optimistic(), {
+      await getRedis().publish(Keys.channel.optimistic(), {
         type: 'optimistic_message',
         message,
         tabId: this.tabId,
@@ -288,16 +302,16 @@ export class RedisCache {
     
     try {
       // Add real message to Redis
-      await redis.zadd(Keys.messages(realMessage.threadId), {
+      await getRedis().zadd(Keys.messages(realMessage.threadId), {
         score: realMessage.timestamp,
         member: JSON.stringify(realMessage),
       });
       
       // Clean up optimistic entry
-      await redis.del(Keys.optimistic(this.tabId));
+      await getRedis().del(Keys.optimistic(this.tabId));
       
       // Notify other tabs
-      await redis.publish(Keys.channel.thread(realMessage.threadId), {
+      await getRedis().publish(Keys.channel.thread(realMessage.threadId), {
         type: 'message_confirmed',
         optimisticId,
         realMessage,
@@ -314,7 +328,7 @@ export class RedisCache {
     
     try {
       // Use pipeline for efficiency
-      const pipeline = redis.pipeline();
+      const pipeline = getRedis().pipeline();
       
       // Clear existing messages
       pipeline.del(Keys.messages(threadId));
@@ -355,7 +369,7 @@ export class RedisCache {
       const lockId = this.tabId;
       
       // Try to acquire lock with NX (only if not exists)
-      const result = await redis.set(lockKey, lockId, {
+      const result = await getRedis().set(lockKey, lockId, {
         nx: true,
         px: ttl,
       });
@@ -370,11 +384,11 @@ export class RedisCache {
   async releaseLock(resource: string): Promise<void> {
     try {
       const lockKey = Keys.lock(resource);
-      const lockId = await redis.get(lockKey);
+      const lockId = await getRedis().get(lockKey);
       
       // Only release if we own the lock
       if (lockId === this.tabId) {
-        await redis.del(lockKey);
+        await getRedis().del(lockKey);
       }
     } catch (error) {
       console.error('Redis releaseLock error:', error);
@@ -385,17 +399,17 @@ export class RedisCache {
   async updatePresence(threadId: string, userId: string): Promise<void> {
     try {
       const presenceKey = Keys.presence(threadId);
-      await redis.zadd(presenceKey, {
+      await getRedis().zadd(presenceKey, {
         score: Date.now(),
         member: JSON.stringify({ userId, tabId: this.tabId }),
       });
       
       // Clean up old presence (older than 30 seconds)
       const cutoff = Date.now() - 30000;
-      await redis.zremrangebyscore(presenceKey, 0, cutoff);
+      await getRedis().zremrangebyscore(presenceKey, 0, cutoff);
       
       // Set TTL
-      await redis.expire(presenceKey, 60);
+      await getRedis().expire(presenceKey, 60);
     } catch (error) {
       console.error('Redis updatePresence error:', error);
     }
@@ -406,7 +420,7 @@ export class RedisCache {
       const presenceKey = Keys.presence(threadId);
       const cutoff = Date.now() - 30000;
       
-      const activeUsers = await redis.zrangebyscore(
+      const activeUsers = await getRedis().zrangebyscore(
         presenceKey,
         cutoff,
         '+inf'
@@ -442,17 +456,23 @@ export class RedisCache {
   // Cleanup
   async cleanup(): Promise<void> {
     try {
+      // Only run cleanup if Redis is configured
+      if (!isRedisConfigured()) {
+        this.memoryCache.clear();
+        return;
+      }
+      
       // Clean up any locks we hold
-      const locks = await redis.keys(`${Keys.lock('*')}`);
+      const locks = await getRedis().keys(`${Keys.lock('*')}`);
       for (const lockKey of locks) {
-        const lockId = await redis.get(lockKey);
+        const lockId = await getRedis().get(lockKey);
         if (lockId === this.tabId) {
-          await redis.del(lockKey);
+          await getRedis().del(lockKey);
         }
       }
       
       // Clean up optimistic updates
-      await redis.del(Keys.optimistic(this.tabId));
+      await getRedis().del(Keys.optimistic(this.tabId));
       
       // Clear subscriptions
       this.subscriptions.forEach(unsub => unsub());
@@ -473,7 +493,7 @@ export class RedisCache {
   }> {
     try {
       // Count Redis keys (this is approximate)
-      const dbSize = await redis.dbsize();
+      const dbSize = await getRedis().dbsize();
       
       // Estimate memory cache size
       let memoryCacheSize = 0;
@@ -497,14 +517,59 @@ export class RedisCache {
   }
 }
 
+// Check if Redis is configured
+const isRedisConfigured = (): boolean => {
+  const url = import.meta.env.VITE_KV_REST_API_URL;
+  const token = import.meta.env.VITE_KV_REST_API_TOKEN;
+  return !!(url && token);
+};
+
 // Singleton instance
 let cacheInstance: RedisCache | null = null;
 
 export function getRedisCache(): RedisCache {
   if (!cacheInstance) {
+    if (!isRedisConfigured()) {
+      console.warn('Redis not configured. Using no-op cache implementation.');
+      // Return a no-op implementation if Redis is not configured
+      return new NoOpRedisCache() as any;
+    }
     cacheInstance = new RedisCache();
   }
   return cacheInstance;
+}
+
+// No-op implementation for when Redis is not configured
+class NoOpRedisCache {
+  async getThread(): Promise<null> { return null; }
+  async saveThread(): Promise<void> {}
+  async getViewport(): Promise<ViewportCache> {
+    return {
+      threadId: '',
+      messages: [],
+      startCursor: null,
+      endCursor: null,
+      hasMore: { up: false, down: false },
+      totalMessages: 0,
+    };
+  }
+  async loadMore(): Promise<CachedMessage[]> { return []; }
+  async addOptimisticMessage(): Promise<void> {}
+  async replaceOptimisticMessage(): Promise<void> {}
+  async syncMessages(): Promise<void> {}
+  async syncThreads(): Promise<void> {}
+  async acquireLock(): Promise<boolean> { return true; }
+  async releaseLock(): Promise<void> {}
+  async updatePresence(): Promise<void> {}
+  async getActiveUsers(): Promise<string[]> { return []; }
+  async cleanup(): Promise<void> {}
+  async getStorageInfo() {
+    return {
+      memoryCacheSize: 0,
+      redisKeys: 0,
+      estimatedSize: 0,
+    };
+  }
 }
 
 // Cleanup on page unload

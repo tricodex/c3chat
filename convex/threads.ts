@@ -216,6 +216,34 @@ export const getBranches = query({
   },
 });
 
+// Update thread
+export const update = mutation({
+  args: {
+    threadId: v.id("threads"),
+    title: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread || thread.userId !== userId) {
+      throw new Error("Thread not found");
+    }
+
+    const updates: any = {};
+    if (args.title !== undefined) updates.title = args.title;
+    if (args.provider !== undefined) updates.provider = args.provider;
+    if (args.model !== undefined) updates.model = args.model;
+
+    await ctx.db.patch(args.threadId, updates);
+  },
+});
+
 // Archive/unarchive thread
 export const archive = mutation({
   args: {

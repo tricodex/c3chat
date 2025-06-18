@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Check, X } from "lucide-react";
-import { useEnhancedSync } from "../lib/corrected-sync-engine";
+import { useEnhancedSync } from "../lib/sync-engine-switcher";
 
 interface MessageEditProps {
   messageId: string;
