@@ -244,15 +244,25 @@ export const generateResponse = action({
 
           const streamBuffer = new StreamBuffer();
           
+          // Configure generation based on model type
+          const config: any = {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          };
+          
+          // Add thinkingConfig for Gemini 2.5 models
+          if (args.model.includes('2.5')) {
+            config.thinkingConfig = {
+              thinkingBudget: 16384 // Default thinking budget for 2.5 models
+            };
+          }
+          
           const stream = await genAI.models.generateContentStream({
             model: args.model,
             contents,
-            config: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
-            },
+            config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -478,15 +488,25 @@ export const sendMessage = action({
 
           const streamBuffer = new StreamBuffer();
           
+          // Configure generation based on model type
+          const config: any = {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          };
+          
+          // Add thinkingConfig for Gemini 2.5 models
+          if (args.model.includes('2.5')) {
+            config.thinkingConfig = {
+              thinkingBudget: 16384 // Default thinking budget for 2.5 models
+            };
+          }
+          
           const stream = await genAI.models.generateContentStream({
             model: args.model,
             contents,
-            config: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
-            },
+            config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -804,15 +824,25 @@ export const regenerateResponse = action({
           
           const streamBuffer = new StreamBuffer();
           
+          // Configure generation based on model type
+          const config: any = {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          };
+          
+          // Add thinkingConfig for Gemini 2.5 models
+          if (model.includes('2.5')) {
+            config.thinkingConfig = {
+              thinkingBudget: 16384 // Default thinking budget for 2.5 models
+            };
+          }
+          
           const stream = await genAI.models.generateContentStream({
             model,
             contents,
-            config: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
-            },
+            config,
           });
           
           for await (const chunk of stream) {
@@ -1064,15 +1094,25 @@ export const sendMessageWithContext = action({
 
           const streamBuffer = new StreamBuffer();
           
+          // Configure generation based on model type
+          const config: any = {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          };
+          
+          // Add thinkingConfig for Gemini 2.5 models
+          if (args.model.includes('2.5')) {
+            config.thinkingConfig = {
+              thinkingBudget: 16384 // Default thinking budget for 2.5 models
+            };
+          }
+          
           const stream = await genAI.models.generateContentStream({
             model: args.model,
             contents,
-            config: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
-            },
+            config,
           });
 
           for await (const chunk of stream) {
