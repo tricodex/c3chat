@@ -7,16 +7,15 @@
   "os": ["darwin", "linux", "win32"],
   "scripts": {
     "dev": "bun run dev:frontend & bun run dev:backend",
-    "dev:frontend": "vite --open",
-    "dev:backend": "convex dev",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage",
-    "build": "vite build",
-    "build:vercel": "npm install --os=linux --cpu=x64 && vite build",
-    "preview": "vite preview",
-    "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build"
+    "dev:frontend": "bunx --bun vite --open",
+    "dev:backend": "bunx convex dev",
+    "test": "bunx vitest",
+    "test:run": "bunx vitest run",
+    "test:ui": "bunx vitest --ui",
+    "test:coverage": "bunx vitest run --coverage",
+    "build": "bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
+    "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && bunx convex dev --once && bunx --bun vite build"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.80",
@@ -75,8 +74,7 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.28.1",
-    "lightningcss-linux-x64-gnu": "1.28.2",
-    "@swc/core-linux-x64-gnu": "1.10.1",
-    "@swc/core-linux-x64-musl": "1.10.1"
+    "@tailwindcss/oxide-linux-x64-gnu": "4.1.8",
+    "lightningcss-linux-x64-gnu": "1.28.2"
   }
 }
