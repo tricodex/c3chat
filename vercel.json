@@ -1,9 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu --no-save && npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm install --force --legacy-peer-deps",
-  "framework": "vite",
-  "env": {
-    "NODE_OPTIONS": "--max-old-space-size=4096"
-  }
+  "framework": "vite"
 }
