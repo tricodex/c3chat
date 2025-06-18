@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useEnhancedSync, useThreads, useOnlineStatus, useSyncStatus } from "../lib/sync-engine-switcher";
 import { Settings } from "./Settings";
-import { Plus, X, Search, MessageSquare, Settings as SettingsIcon, Sun, Moon, Trash2, Clock, Zap } from "lucide-react";
+import { Plus, X, Search, MessageSquare, Settings as SettingsIcon, Sun, Moon, Trash2, Clock, Zap, Key, AlertCircle } from "lucide-react";
+import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 
 export function Sidebar({ 
   isOpen, 
@@ -28,9 +29,51 @@ export function Sidebar({
   const [isCreating, setIsCreating] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasApiKey, setHasApiKey] = useState(false);
+
+  // Check if any API key is configured
+  useEffect(() => {
+    const checkApiKeys = async () => {
+      const providers = Object.values(AI_PROVIDERS);
+      for (const provider of providers) {
+        const apiKey = await getStoredApiKey(provider.id);
+        if (apiKey) {
+          setHasApiKey(true);
+          return;
+        }
+      }
+      setHasApiKey(false);
+    };
+    
+    checkApiKeys();
+    // Re-check when settings close
+  }, [showSettings]);
 
   const handleCreateThread = async () => {
     if (isCreating) return;
+    
+    // Check if any provider has an API key
+    const providers = Object.values(AI_PROVIDERS);
+    let hasAnyApiKey = false;
+    
+    for (const provider of providers) {
+      const apiKey = await getStoredApiKey(provider.id);
+      if (apiKey) {
+        hasAnyApiKey = true;
+        break;
+      }
+    }
+    
+    if (!hasAnyApiKey) {
+      toast.error(
+        <div>
+          <div className="font-semibold">API Key Required</div>
+          <div className="text-sm mt-1">Please add an API key in Settings first</div>
+        </div>
+      );
+      setShowSettings(true);
+      return;
+    }
     
     setIsCreating(true);
     try {
@@ -275,13 +318,32 @@ export function Sidebar({
             </div>
           )}
 
+          {/* API Key Warning */}
+          {!hasApiKey && (
+            <div className="mb-3 p-3 rounded-lg bg-[var(--c3-warning)]/10 border border-[var(--c3-warning)]/20">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-[var(--c3-warning)] mt-0.5 flex-shrink-0" />
+                <div className="text-xs">
+                  <p className="font-medium text-[var(--c3-warning)]">API Key Required</p>
+                  <p className="text-[var(--c3-text-secondary)] mt-0.5">Add your API key in Settings to start chatting</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Settings Button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="w-full c3-button c3-button-secondary"
+            className="w-full c3-button c3-button-secondary relative"
           >
             <SettingsIcon className="w-4 h-4" />
             Settings
+            {!hasApiKey && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--c3-warning)] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-[var(--c3-warning)]"></span>
+              </span>
+            )}
           </button>
 
           {/* Theme Toggle */}

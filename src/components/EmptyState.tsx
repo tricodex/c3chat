@@ -31,7 +31,7 @@ export function EmptyState() {
             <FeatureCard
               icon={Bot}
               title="Multiple AI Models"
-              description="Chat with GPT-5, Claude 4, Gemini 2.5, and more"
+              description="Chat with GPT-4o, Claude, Gemini, and more"
             />
             <FeatureCard
               icon={Palette}
