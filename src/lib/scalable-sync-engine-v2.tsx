@@ -712,8 +712,16 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (convexThreads) {
       dispatch({ type: 'SET_THREADS_FROM_CONVEX', payload: convexThreads });
+      
+      // Restore selected thread from cross-tab storage on initial load
+      if (!state.selectedThreadId && convexThreads.length > 0) {
+        const savedThreadId = crossTabSync.current.getSelectedThread();
+        if (savedThreadId && convexThreads.some(t => t._id === savedThreadId)) {
+          dispatch({ type: 'SELECT_THREAD', payload: savedThreadId });
+        }
+      }
     }
-  }, [convexThreads]);
+  }, [convexThreads, state.selectedThreadId]);
   
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
@@ -745,6 +753,30 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [convexMessages, state.selectedThreadId, isRedisEnabled]);
   
+  // Cross-tab synchronization
+  useEffect(() => {
+    // Subscribe to thread selection changes from other tabs
+    const unsubscribe = crossTabSync.current.subscribe('thread_selected', (message) => {
+      const { threadId } = message.payload;
+      
+      // Only update if it's different from our current selection
+      if (threadId !== state.selectedThreadId) {
+        dispatch({ type: 'SELECT_THREAD', payload: threadId });
+        
+        // Load viewport for the new thread if Redis is enabled
+        if (threadId && isRedisEnabled) {
+          redisCache.current.getViewport(threadId).then(viewport => {
+            dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+          }).catch(error => {
+            console.error('Failed to load viewport from Redis:', error);
+          });
+        }
+      }
+    });
+    
+    return unsubscribe;
+  }, [state.selectedThreadId, isRedisEnabled]);
+  
   // Online status monitoring
   useEffect(() => {
     const handleOnline = () => dispatch({ type: 'SET_ONLINE', payload: true });
@@ -765,6 +797,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (isRedisEnabled) {
         redisCache.current.cleanup();
       }
+      crossTabSync.current.cleanup();
     };
   }, [isRedisEnabled]);
   
