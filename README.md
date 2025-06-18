@@ -14,13 +14,13 @@ A modern AI chat application with support for OpenAI and Google Gemini, real-tim
 - ✅ **Easy to Try**: [Live demo](https://clone3chat.vercel.app) - no setup required!
 
 ### Bonus Features (Implemented)
-- ✅ **Attachment Support**: Upload images & PDFs with AI analysis
+- ✅ **Attachment Support**: Upload images & PDFs (placeholder analysis only)
 - ✅ **Image Generation**: DALL-E 3 via OpenAI
 - ✅ **Syntax Highlighting**: Beautiful code blocks with copy functionality
-- ✅ **Resumable Streams**: Continue generation after refresh
+- ❌ **Resumable Streams**: Streaming works but doesn't resume after refresh
 - ✅ **Chat Branching**: Fork conversations at any point
-- ✅ **Chat Sharing**: Shareable URLs for each conversation
-- ✅ **Web Search**: Integrated Tavily search API
+- ⚠️ **Chat Sharing**: Backend ready but frontend route not implemented
+- ⚠️ **Web Search**: Tavily API integrated (requires TAVILY_API_KEY in backend)
 - ✅ **Bring Your Own Key**: Use your own API keys or try with Gemini free
 
 ### Extra Features
