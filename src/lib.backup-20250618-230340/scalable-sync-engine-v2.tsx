@@ -394,7 +394,6 @@ interface SyncContextValue {
     clearThread: (threadId: string) => Promise<void>;
     retryOperation: (operationId: string) => Promise<void>;
     clearError: () => void;
-    loadMoreMessages: (direction: 'up' | 'down') => Promise<void>;
   };
 }
 
@@ -416,38 +415,32 @@ export const useThreads = () => {
 
 export const useMessages = (threadId?: string): Message[] => {
   const { state } = useEnhancedSync();
-  if (!threadId) return [];
-  
-  // CRITICAL: Check if viewport is loaded and matches thread
-  if (state.currentViewport && 
-      state.currentViewport.threadId === threadId &&
-      state.currentViewport.messages.length > 0) {
-    
-    // Convert cached messages to Message type
-    return state.currentViewport.messages.map(cached => ({
-      _id: cached._id as Id<"messages">,
-      threadId: cached.threadId as Id<"threads">,
-      content: cached.content || '',
-      role: cached.role,
-      isStreaming: cached.isOptimistic && cached.role === 'assistant',
-      cursor: cached.isOptimistic && cached.role === 'assistant' && !cached.content,
-      provider: cached.metadata?.provider,
-      model: cached.metadata?.model,
-      inputTokens: cached.metadata?.inputTokens,
-      outputTokens: cached.metadata?.outputTokens,
-      generatedImageUrl: cached.metadata?.generatedImageUrl,
-      generatedVideoUrl: cached.metadata?.generatedVideoUrl,
-      attachments: cached.metadata?.attachments || [],
-      isOptimistic: cached.isOptimistic || false,
-      _creationTime: cached.timestamp,
-      createdAt: cached.timestamp,
-    }));
+  if (!threadId) {
+    console.log('useMessages: No threadId provided');
+    return [];
   }
   
-  // FALLBACK: Only use memory if viewport not ready
-  // This should be temporary during initial load
-  console.warn(`Viewport not ready for thread ${threadId}, using memory messages`);
-  return state.messages[threadId] || [];
+  // Always use in-memory messages for now until viewport is properly fixed
+  const memoryMessages = state.messages[threadId] || [];
+  
+  console.log('useMessages:', {
+    threadId,
+    memoryMessageCount: memoryMessages.length,
+    stateMessagesKeys: Object.keys(state.messages),
+    hasViewport: !!state.currentViewport,
+    viewportThreadId: state.currentViewport?.threadId,
+  });
+  
+  // Debug logging
+  if (state.currentViewport && state.currentViewport.threadId === threadId) {
+    console.log('Viewport available but using memory messages:', {
+      viewportMessageCount: state.currentViewport.messages.length,
+      memoryMessageCount: memoryMessages.length,
+      threadId
+    });
+  }
+  
+  return memoryMessages;
 };
 
 export const useSelectedThread = () => {
@@ -528,9 +521,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const exportThreadAction = useAction(api.threads.exportThread);
   const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
   
-  // SIMPLIFIED: Redis is automatically enabled when using scalable sync
-  // No need for separate VITE_ENABLE_REDIS_CACHE flag
-  const isRedisEnabled = true;
+  // Enable Redis if configured
+  const isRedisEnabled = import.meta.env.VITE_ENABLE_REDIS_CACHE === 'true';
   
   // Actions implementation
   const actions = useCallback(() => ({
@@ -541,22 +533,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       if (isRedisEnabled) {
         lockAcquired = await redisCache.current.acquireLock(lockKey, 5000);
-        
         if (!lockAcquired) {
-          // Try once more with shorter timeout
-          lockAcquired = await redisCache.current.acquireLock(lockKey, 1000);
-          
-          if (!lockAcquired) {
-            // Force release any stale lock and acquire
-            await redisCache.current.releaseLock(lockKey);
-            lockAcquired = await redisCache.current.acquireLock(lockKey, 5000);
-            
-            if (!lockAcquired) {
-              console.error('CRITICAL: Cannot acquire lock for thread switch');
-              // Still proceed but mark as potentially inconsistent
-              dispatch({ type: 'SET_ERROR', payload: 'Thread switch may be inconsistent' });
-            }
-          }
+          console.warn('Could not acquire lock for thread switch, proceeding anyway');
         }
       }
       
@@ -773,42 +751,6 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     clearError: () => {
       dispatch({ type: 'SET_ERROR', payload: null });
-    },
-    
-    loadMoreMessages: async (direction: 'up' | 'down') => {
-      if (!state.selectedThreadId || !isRedisEnabled || !state.currentViewport) {
-        console.warn('Cannot load more messages: no thread selected or Redis not enabled');
-        return;
-      }
-      
-      try {
-        const currentViewport = state.currentViewport;
-        const threadId = state.selectedThreadId;
-        
-        // Determine the anchor message based on direction
-        const anchorMessage = direction === 'up' 
-          ? currentViewport.messages[0]
-          : currentViewport.messages[currentViewport.messages.length - 1];
-          
-        if (!anchorMessage) {
-          console.warn('No anchor message found for pagination');
-          return;
-        }
-        
-        // Load more messages from Redis with pagination
-        const expandedViewport = await redisCache.current.expandViewport(
-          threadId,
-          anchorMessage.timestamp,
-          direction
-        );
-        
-        if (expandedViewport) {
-          dispatch({ type: 'SET_VIEWPORT', payload: expandedViewport });
-        }
-      } catch (error) {
-        console.error('Failed to load more messages:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to load more messages' });
-      }
     },
   }), [state, createThreadMutation, updateThreadMutation, deleteThreadMutation, sendMessageMutation, updateMessageMutation, deleteMessageMutation, generateResponseAction, generateImageAction, generateVideoAction, regenerateResponseAction, createBranchMutation, shareThreadMutation, exportThreadAction, sendMessageWithContext, isRedisEnabled]);
   

@@ -96,13 +96,6 @@ export class RedisCache {
   private memoryCache: Map<string, ViewportCache>;
   private subscriptions: Map<string, () => void>;
   
-  // Streaming message buffer to reduce updates
-  private streamingBuffer = new Map<string, {
-    content: string;
-    lastUpdate: number;
-    timeoutId?: NodeJS.Timeout;
-  }>();
-  
   constructor() {
     this.tabId = nanoid();
     this.memoryCache = new Map();
@@ -326,141 +319,6 @@ export class RedisCache {
       });
     } catch (error) {
       console.error('Redis replaceOptimisticMessage error:', error);
-    }
-  }
-  
-  async updateStreamingMessage(
-    messageId: string, 
-    content: string, 
-    threadId: string,
-    forceFlush = false
-  ): Promise<void> {
-    const now = Date.now();
-    const buffer = this.streamingBuffer.get(messageId);
-    
-    if (!buffer) {
-      this.streamingBuffer.set(messageId, {
-        content,
-        lastUpdate: now,
-      });
-    } else {
-      buffer.content = content;
-      
-      // Clear existing timeout
-      if (buffer.timeoutId) {
-        clearTimeout(buffer.timeoutId);
-      }
-    }
-    
-    const shouldUpdate = forceFlush || 
-      !buffer || 
-      (now - buffer.lastUpdate > 100); // Update every 100ms max
-    
-    if (shouldUpdate) {
-      const viewport = this.memoryCache.get(threadId);
-      if (viewport) {
-        const msgIndex = viewport.messages.findIndex(m => m._id === messageId);
-        if (msgIndex >= 0) {
-          viewport.messages[msgIndex] = {
-            ...viewport.messages[msgIndex],
-            content,
-            version: (viewport.messages[msgIndex].version || 0) + 1,
-          };
-        }
-      }
-      
-      this.streamingBuffer.get(messageId)!.lastUpdate = now;
-    } else {
-      // Schedule update
-      const timeoutId = setTimeout(() => {
-        this.updateStreamingMessage(messageId, content, threadId, true);
-      }, 100);
-      
-      this.streamingBuffer.get(messageId)!.timeoutId = timeoutId;
-    }
-  }
-  
-  async expandViewport(
-    threadId: string,
-    anchorTimestamp: number,
-    direction: 'up' | 'down'
-  ): Promise<ViewportCache | null> {
-    try {
-      const currentViewport = this.memoryCache.get(threadId);
-      if (!currentViewport) {
-        // No current viewport, get fresh one
-        return await this.getViewport(threadId, 'bottom');
-      }
-      
-      const key = Keys.messages(threadId);
-      const messageCount = await getRedis().zcard(key);
-      
-      let newMessages: CachedMessage[];
-      const loadCount = 25; // Load 25 messages at a time
-      
-      if (direction === 'up') {
-        // Load older messages before anchor
-        const rawMessages = await getRedis().zrangebyscore(
-          key,
-          '-inf',
-          `(${anchorTimestamp}`,
-          {
-            withScores: false,
-            limit: { offset: 0, count: loadCount },
-            rev: true // Get newest first, then reverse
-          }
-        );
-        
-        newMessages = ((rawMessages || []).map(item => 
-          typeof item === 'string' ? JSON.parse(item) : item
-        ) as CachedMessage[]).reverse();
-        
-        // Merge with existing messages
-        currentViewport.messages = [...newMessages, ...currentViewport.messages].slice(-MAX_MEMORY_MESSAGES);
-        if (newMessages.length > 0) {
-          currentViewport.startCursor = newMessages[0]._id;
-        }
-        
-        // Update hasMore flags
-        const oldestTimestamp = newMessages.length > 0 ? newMessages[0].timestamp : anchorTimestamp;
-        const hasOlderMessages = await getRedis().zcount(key, '-inf', `(${oldestTimestamp}`);
-        currentViewport.hasMore.top = hasOlderMessages > 0;
-        
-      } else {
-        // Load newer messages after anchor
-        const rawMessages = await getRedis().zrangebyscore(
-          key,
-          `(${anchorTimestamp}`,
-          '+inf',
-          {
-            withScores: false,
-            limit: { offset: 0, count: loadCount }
-          }
-        );
-        
-        newMessages = (rawMessages || []).map(item => 
-          typeof item === 'string' ? JSON.parse(item) : item
-        ) as CachedMessage[];
-        
-        // Merge with existing messages
-        currentViewport.messages = [...currentViewport.messages, ...newMessages].slice(0, MAX_MEMORY_MESSAGES);
-        if (newMessages.length > 0) {
-          currentViewport.endCursor = newMessages[newMessages.length - 1]._id;
-        }
-        
-        // Update hasMore flags
-        const newestTimestamp = newMessages.length > 0 ? newMessages[newMessages.length - 1].timestamp : anchorTimestamp;
-        const hasNewerMessages = await getRedis().zcount(key, `(${newestTimestamp}`, '+inf');
-        currentViewport.hasMore.bottom = hasNewerMessages > 0;
-      }
-      
-      // Update memory cache
-      this.updateMemoryCache(threadId, currentViewport);
-      
-      return currentViewport;
-    } catch (error) {
-      console.error('Redis expandViewport error:', error);
-      return null;
     }
   }
   
@@ -698,16 +556,6 @@ class NoOpRedisCache {
   async loadMore(): Promise<CachedMessage[]> { return []; }
   async addOptimisticMessage(): Promise<void> {}
   async replaceOptimisticMessage(): Promise<void> {}
-  async updateStreamingMessage(): Promise<void> {}
-  async expandViewport(): Promise<ViewportCache | null> { 
-    return {
-      threadId: '',
-      messages: [],
-      startCursor: null,
-      endCursor: null,
-      hasMore: { top: false, bottom: false },
-    };
-  }
   async syncMessages(): Promise<void> {}
   async syncThreads(): Promise<void> {}
   async acquireLock(): Promise<boolean> { return true; }

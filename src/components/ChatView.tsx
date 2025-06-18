@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useEnhancedSync, useMessages, useSelectedThread } from "../lib/sync-engine-switcher";
 import { MessageList } from "./MessageList";
@@ -36,19 +36,77 @@ export function ChatView() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  
+  // Add viewport loading state
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const SCROLL_THRESHOLD = 200; // pixels from top/bottom to trigger load
+
+  // Get viewport info from state
+  const viewportInfo = useMemo(() => {
+    if (!state.currentViewport || state.currentViewport.threadId !== selectedThread?._id) {
+      return null;
+    }
+    return {
+      hasMoreTop: state.currentViewport.hasMore?.top || false,
+      hasMoreBottom: state.currentViewport.hasMore?.bottom || false,
+      messageCount: state.currentViewport.messages.length,
+    };
+  }, [state.currentViewport, selectedThread?._id]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   // Check if user is near bottom of scroll
-  const checkIfNearBottom = () => {
+  const checkIfNearBottom = async () => {
     const container = messagesContainerRef.current;
-    if (!container) return true;
+    if (!container || isLoadingMore) return true;
     
-    const threshold = 150; // pixels from bottom
+    const threshold = 150;
     const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     setIsNearBottom(isNear);
+    
+    // NEW: Check if we need to load more messages
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    
+    // Load more at top
+    if (scrollTop < SCROLL_THRESHOLD && viewportInfo?.hasMoreTop && !isLoadingMore) {
+      setIsLoadingMore(true);
+      const previousHeight = scrollHeight;
+      
+      try {
+        await actions.loadMoreMessages('up');
+        
+        // Maintain scroll position after loading
+        requestAnimationFrame(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight;
+            const heightDiff = newScrollHeight - previousHeight;
+            container.scrollTop = scrollTop + heightDiff;
+          }
+        });
+      } catch (error) {
+        console.error('Failed to load more messages:', error);
+      } finally {
+        setIsLoadingMore(false);
+      }
+    }
+    
+    // Load more at bottom
+    if (scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD && 
+        viewportInfo?.hasMoreBottom && !isLoadingMore) {
+      setIsLoadingMore(true);
+      try {
+        await actions.loadMoreMessages('down');
+      } catch (error) {
+        console.error('Failed to load more messages:', error);
+      } finally {
+        setIsLoadingMore(false);
+      }
+    }
+    
     return isNear;
   };
 

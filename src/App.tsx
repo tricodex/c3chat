@@ -13,6 +13,11 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SecurityInitializer } from "./components/SecurityInitializer";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 
+// Import Redis monitor in development
+if (import.meta.env.DEV) {
+  import('./lib/redis-monitor');
+}
+
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open on desktop

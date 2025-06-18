@@ -45,19 +45,14 @@ import {
   useActiveUsers,
 } from './scalable-sync-engine-v2';
 
-// SIMPLIFIED: Check which sync engine to use
-// Deploy with false first, monitor for 24 hours, then enable
+// Check which sync engine to use
 const USE_SCALABLE_SYNC = import.meta.env.VITE_USE_SCALABLE_SYNC_ENGINE === 'true';
 
 // Log which engine is being used
 if (typeof window !== 'undefined') {
   console.log(`🚀 Using ${USE_SCALABLE_SYNC ? 'NEW Scalable' : 'OLD Corrected'} Sync Engine`);
-  
-  // IMPORTANT: Redis is automatically enabled with scalable sync
-  // No need for separate VITE_ENABLE_REDIS_CACHE flag
   if (USE_SCALABLE_SYNC) {
-    const hasRedisConfig = !!(import.meta.env.VITE_KV_REST_API_URL && import.meta.env.VITE_KV_REST_API_TOKEN);
-    console.log('✨ Redis:', hasRedisConfig ? 'Configured ✓' : 'Not configured (using fallback)');
+    console.log('✨ Redis caching enabled:', import.meta.env.VITE_ENABLE_REDIS_CACHE === 'true');
   }
 }
 
