@@ -23,8 +23,8 @@ import { nanoid } from "nanoid";
 
 // Initialize Redis client
 const redis = new Redis({
-  url: process.env.KV_REST_API_URL || process.env.VITE_KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN || process.env.VITE_KV_REST_API_TOKEN!,
+  url: import.meta.env.VITE_KV_REST_API_URL,
+  token: import.meta.env.VITE_KV_REST_API_TOKEN,
 });
 
 // Types
@@ -132,13 +132,14 @@ export class RedisCache {
       
       if (anchor === 'bottom') {
         // Get latest messages
-        const rawMessages = await redis.zrange<CachedMessage[]>(
+        const rawMessages = await redis.zrange(
           Keys.messages(threadId),
           -VIEWPORT_SIZE,
-          -1,
-          { withScores: false }
+          -1
         );
-        messages = rawMessages || [];
+        messages = (rawMessages || []).map(item => 
+          typeof item === 'string' ? JSON.parse(item) : item
+        ) as CachedMessage[];
         
         if (messages.length > 0) {
           startCursor = messages[0]._id;
@@ -146,13 +147,14 @@ export class RedisCache {
         }
       } else {
         // Get oldest messages
-        const rawMessages = await redis.zrange<CachedMessage[]>(
+        const rawMessages = await redis.zrange(
           Keys.messages(threadId),
           0,
-          VIEWPORT_SIZE - 1,
-          { withScores: false }
+          VIEWPORT_SIZE - 1
         );
-        messages = rawMessages || [];
+        messages = (rawMessages || []).map(item => 
+          typeof item === 'string' ? JSON.parse(item) : item
+        ) as CachedMessage[];
         
         if (messages.length > 0) {
           startCursor = messages[0]._id;
@@ -199,29 +201,32 @@ export class RedisCache {
       
       if (direction === 'up') {
         // Load older messages
-        const rawMessages = await redis.zrange<CachedMessage[]>(
+        const rawMessages = await redis.zrangebyscore(
           key,
           '-inf',
           `(${cursorScore}`,
-          { 
-            byScore: true,
-            limit: { offset: 0, count: 25 },
-            rev: true
-          }
-        );
-        messages = (rawMessages || []).reverse();
-      } else {
-        // Load newer messages
-        const rawMessages = await redis.zrange<CachedMessage[]>(
-          key,
-          `(${cursorScore}`,
-          '+inf',
-          { 
-            byScore: true,
+          {
+            withScores: false,
             limit: { offset: 0, count: 25 }
           }
         );
-        messages = rawMessages || [];
+        messages = ((rawMessages || []).map(item => 
+          typeof item === 'string' ? JSON.parse(item) : item
+        ) as CachedMessage[]).reverse();
+      } else {
+        // Load newer messages
+        const rawMessages = await redis.zrangebyscore(
+          key,
+          `(${cursorScore}`,
+          '+inf',
+          {
+            withScores: false,
+            limit: { offset: 0, count: 25 }
+          }
+        );
+        messages = (rawMessages || []).map(item => 
+          typeof item === 'string' ? JSON.parse(item) : item
+        ) as CachedMessage[];
       }
       
       // Update memory cache
@@ -323,7 +328,10 @@ export class RedisCache {
       // Batch add (Redis supports up to 1000 items per zadd)
       for (let i = 0; i < members.length; i += 500) {
         const batch = members.slice(i, i + 500);
-        pipeline.zadd(Keys.messages(threadId), ...batch);
+        // Add each member individually to the pipeline
+        batch.forEach(({ score, member }) => {
+          pipeline.zadd(Keys.messages(threadId), { score, member });
+        });
       }
       
       // Set expiry
@@ -398,11 +406,10 @@ export class RedisCache {
       const presenceKey = Keys.presence(threadId);
       const cutoff = Date.now() - 30000;
       
-      const activeUsers = await redis.zrange<string[]>(
+      const activeUsers = await redis.zrangebyscore(
         presenceKey,
         cutoff,
-        '+inf',
-        { byScore: true }
+        '+inf'
       );
       
       // Parse and deduplicate by userId

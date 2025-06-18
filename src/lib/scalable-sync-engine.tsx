@@ -277,6 +277,21 @@ export const useActiveUsers = (threadId: string): string[] => {
   return state.activeUsers.get(threadId) || [];
 };
 
+// Export offline capability hook
+export const useOfflineCapability = () => {
+  const { state } = useScalableSync();
+  return {
+    isOfflineCapable: true,
+    isOnline: state.isOnline,
+    pendingOperations: Array.from(state.pendingOperations.values()),
+    pendingOperationCount: state.pendingOperations.size,
+    storageQuota: null,
+    hasPendingChanges: state.pendingOperations.size > 0,
+    syncStatus: state.syncStatus,
+    retryOperation: (id: string) => state.pendingOperations.get(id) ? Promise.resolve() : Promise.resolve(),
+  };
+};
+
 // Provider
 export const ScalableSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(syncReducer, initialState);
@@ -382,8 +397,8 @@ export const ScalableSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             
             // Trigger AI response
             await generateResponseAction({
-              messageId,
               threadId,
+              userMessageId: messageId,
               provider: op.data.provider,
               model: op.data.model,
               apiKey: op.data.apiKey,
@@ -466,9 +481,18 @@ export const ScalableSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       // Add to viewport immediately
       await redisCache.current.addOptimisticMessage(optimisticMessage);
+      const messageToAdd: Message = {
+        _id: optimisticMessage._id as Id<"messages">,
+        threadId: optimisticMessage.threadId as Id<"threads">,
+        content: optimisticMessage.content,
+        role: optimisticMessage.role,
+        isOptimistic: optimisticMessage.isOptimistic,
+        _creationTime: optimisticMessage.timestamp,
+        ...optimisticMessage.metadata
+      };
       dispatch({ 
         type: 'UPDATE_VIEWPORT_MESSAGES', 
-        payload: { messages: [optimisticMessage as any], position: 'end' }
+        payload: { messages: [messageToAdd], position: 'end' }
       });
       
       // Create pending operation
@@ -515,10 +539,19 @@ export const ScalableSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         );
         
         if (messages.length > 0) {
+          const messagesToAdd: Message[] = messages.map(m => ({
+            _id: m._id as Id<"messages">,
+            threadId: m.threadId as Id<"threads">,
+            content: m.content,
+            role: m.role,
+            isOptimistic: m.isOptimistic,
+            _creationTime: m.timestamp,
+            ...m.metadata
+          }));
           dispatch({ 
             type: 'UPDATE_VIEWPORT_MESSAGES', 
             payload: { 
-              messages: messages as any[], 
+              messages: messagesToAdd, 
               position: direction === 'up' ? 'start' : 'end' 
             }
           });
@@ -561,5 +594,4 @@ export const ScalableSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 };
 
-// Export convenience functions
-export { useMessages, useSelectedThread, useActiveUsers } from './corrected-sync-engine';
+// Note: useMessages, useSelectedThread, and useActiveUsers are defined above in this file
