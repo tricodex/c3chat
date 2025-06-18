@@ -10,6 +10,8 @@ interface MessageListProps {
   messages: Message[];
   messagesEndRef: RefObject<HTMLDivElement>;
   threadId: Id<"threads">;
+  containerRef?: RefObject<HTMLDivElement>;
+  onScroll?: () => void;
 }
 
 // Provider icon mapping using Lucide icons
@@ -27,14 +29,18 @@ const providerIcons: Record<string, React.ComponentType<any>> = {
   openrouter: Globe,
 };
 
-export function MessageList({ messages, messagesEndRef, threadId }: MessageListProps) {
+export function MessageList({ messages, messagesEndRef, threadId, containerRef, onScroll }: MessageListProps) {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   
   
   if (messages.length === 0) {
     return (
-      <div className="c3-messages c3-scrollbar">
+      <div 
+        className="c3-messages c3-scrollbar"
+        ref={containerRef}
+        onScroll={onScroll}
+      >
         <div className="flex flex-col items-center justify-center h-full text-center">
           <div className="c3-empty-icon">
             <MessageCircle className="w-10 h-10" style={{ color: 'var(--c3-text-muted)' }} />
@@ -78,7 +84,11 @@ export function MessageList({ messages, messagesEndRef, threadId }: MessageListP
   }
   
   return (
-    <div className="c3-messages c3-scrollbar">
+    <div 
+      className="c3-messages c3-scrollbar"
+      ref={containerRef}
+      onScroll={onScroll}
+    >
       {messages.map((message, index) => {
         
         // Get provider icon for assistant messages

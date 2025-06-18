@@ -47,14 +47,36 @@ export function ChatView() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Check if user is near bottom of scroll
+  const checkIfNearBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    
+    const threshold = 150; // pixels from bottom
+    const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    setIsNearBottom(isNear);
+    return isNear;
+  };
+
+  // Auto-scroll only when appropriate
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Only auto-scroll if:
+    // 1. User is near bottom (following conversation)
+    // 2. Or it's the initial load (messages.length === 0 -> messages.length > 0)
+    // 3. Or user just sent a message (shouldAutoScroll flag)
+    if (isNearBottom || shouldAutoScroll || messages.length <= 1) {
+      scrollToBottom();
+      setShouldAutoScroll(false);
+    }
+  }, [messages, isNearBottom, shouldAutoScroll]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -90,6 +112,7 @@ export function ChatView() {
 
     setIsSending(true);
     setInput("");
+    setShouldAutoScroll(true); // Auto-scroll when user sends a message
 
     try {
       // Handle commands
@@ -412,6 +435,8 @@ export function ChatView() {
         messages={messages} 
         messagesEndRef={messagesEndRef}
         threadId={selectedThread._id}
+        containerRef={messagesContainerRef}
+        onScroll={checkIfNearBottom}
       />
 
       {/* Input */}
