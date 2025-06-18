@@ -4,15 +4,14 @@
 
 A modern AI chat application with support for OpenAI and Google Gemini, real-time sync via Convex, and persistent chat URLs.
 
-**[🚀 Try Demo](https://c3chat.vercel.app)** | **[📺 Video Demo](#)** | **[📖 Documentation](docs/)**
-
+**[🚀 Try Demo](https://clone3chat.vercel.app)** 
 ## ✨ Features
 
 ### Core Features (Competition Requirements)
 - ✅ **Multi-Model Chat**: OpenAI (GPT-4o), Google Gemini, and OpenRouter support
 - ✅ **Authentication & Sync**: Real-time sync across devices with Convex
 - ✅ **Browser Friendly**: Modern web app with React 19
-- ✅ **Easy to Try**: [Live demo](https://c3chat.vercel.app) - no setup required!
+- ✅ **Easy to Try**: [Live demo](https://clone3chat.vercel.app) - no setup required!
 
 ### Bonus Features (Implemented)
 - ✅ **Attachment Support**: Upload images & PDFs with AI analysis
