@@ -61,9 +61,14 @@ export function EmptyState() {
           </div>
 
           {/* CTA */}
-          <p className="text-sm" style={{ color: 'var(--c3-text-tertiary)' }}>
-            Select or create a chat from the sidebar to get started
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm" style={{ color: 'var(--c3-text-tertiary)' }}>
+              Select or create a chat from the sidebar to get started
+            </p>
+            <p className="text-xs" style={{ color: 'var(--c3-text-muted)' }}>
+              💡 Remember to add your API key in Settings (gear icon) before chatting
+            </p>
+          </div>
         </div>
       </div>
     </div>

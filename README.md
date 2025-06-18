@@ -2,34 +2,31 @@
 
 🏆 **T3 Chat Cloneathon Submission**
 
-A modern AI chat application with support for OpenAI and Google Gemini, real-time sync via Convex, and persistent chat URLs.
+A modern AI chat application with support for multiple AI providers, real-time sync via Convex, and persistent chat URLs.
 
 **[🚀 Try Demo](https://clone3chat.vercel.app)** 
 ## ✨ Features
 
-### Core Features (Competition Requirements)
-- ✅ **Multi-Model Chat**: OpenAI (GPT-4o), Google Gemini, and OpenRouter support
+### Core Features
+- ✅ **Multi-Model Chat**: Google Gemini, OpenAI, and OpenRouter support
 - ✅ **Authentication & Sync**: Real-time sync across devices with Convex
 - ✅ **Browser Friendly**: Modern web app with React 19
-- ✅ **Easy to Try**: [Live demo](https://clone3chat.vercel.app) - no setup required!
+- ✅ **Bring Your Own Key**: All providers require API keys for security
 
-### Bonus Features (Implemented)
-- ✅ **Attachment Support**: Upload images & PDFs (placeholder analysis only)
+### Additional Features
+- ✅ **Attachment Support**: Upload images (multimodal analysis with Gemini/GPT-4o)
 - ✅ **Image Generation**: DALL-E 3 via OpenAI
-- ✅ **Syntax Highlighting**: Beautiful code blocks with copy functionality
-- ❌ **Resumable Streams**: Streaming works but doesn't resume after refresh
-- ✅ **Chat Branching**: Fork conversations at any point
-- ⚠️ **Chat Sharing**: Backend ready but frontend route not implemented
-- ⚠️ **Web Search**: Tavily API integrated (requires TAVILY_API_KEY in backend)
-- ✅ **Bring Your Own Key**: Use your own API keys or try with Gemini free
+- ✅ **Syntax Highlighting**: Code blocks with copy functionality
+- ✅ **Chat Branching**: Fork conversations at any message
+- ✅ **Message Editing**: Edit and regenerate any message
+- ⚠️ **Web Search**: Tavily API (requires backend API key)
+- ✅ **Bring Your Own Key**: Use your own API keys for providers
 
-### Extra Features
 - 🎙️ **Voice Input**: Browser-based speech recognition
-- ⚡ **Cross-Tab Sync**: Instant sync between browser tabs
-- 📝 **Message Editing**: Edit and regenerate any message
-- 🔍 **Slash Commands**: Quick actions like `/image`, `/search`, `/help`
-- 🔐 **Security**: Encrypted key storage, secure auth
-- 🔗 **URL Routing**: Direct links to specific chats (e.g., `/chat/8b1e049d-d7e8-4a60-8e1f-20d17ff411ba`)
+- ⚡ **Cross-Tab Sync**: localStorage events for instant sync
+- 🔍 **Slash Commands**: `/image`, `/search`, `/help`
+- 🔐 **Security**: Encrypted API key storage with AES-GCM
+- 🔗 **URL Routing**: Direct links to specific chats
 
 ## 🚀 Quick Start
 
@@ -39,29 +36,26 @@ Visit [clone3chat.vercel.app](https://clone3chat.vercel.app) - no installation r
 ### Run Locally
 ```bash
 # Clone the repository
-git clone https://github.com/tricodex/c3chat.git
+git clone https://github.com/yourusername/c3chat.git
 cd c3chat
 
 # Install dependencies
 bun install
 
-# Copy environment variables
-cp .env.local.example .env.local
+# Copy environment variables (if exists)
+cp .env.example .env.local
 
-# Start Convex backend (in one terminal)
-bunx convex dev
-
-# Run development server (in another terminal)
+# Start development (runs both frontend and backend)
 bun run dev
 ```
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite 6
-- **Backend**: Convex (reactive database + serverless)
-- **AI**: OpenAI and Google Gemini with streaming support
+- **Backend**: Convex (reactive database + serverless functions)
+- **AI Providers**: Google Gemini, OpenAI, OpenRouter
 - **Storage**: Convex file storage for attachments
-- **Testing**: Vitest, React Testing Library
+- **Package Manager**: Bun
 - **Deployment**: Vercel + Convex
 
 ## 📸 Screenshots
@@ -84,12 +78,10 @@ c3chat/
 ```
 
 ### Key Features
-
-**URL-Based Chat Navigation**
 - Each chat has a unique URL: `/chat/{uuid}`
 - Direct linking to specific conversations
 - Browser back/forward navigation support
-- Shareable chat URLs for collaboration
+- Cross-tab synchronization via localStorage
 
 ## 🔑 Environment Variables
 
@@ -108,12 +100,12 @@ VITE_CONVEX_URL=your-convex-url
 
 ## 🏆 Competition Submission
 
-This project was built for the T3 Chat Cloneathon, implementing all core requirements and bonus features:
+This project was built for the T3 Chat Cloneathon:
 
 - **Unique Features**: Persistent URL routing for chats, cross-tab sync, voice input
 - **Code Quality**: TypeScript throughout, Convex for type-safe backend
-- **User Experience**: Clean design, streaming responses, works with Google Gemini by default (no API key needed)
-- **Open Source**: MIT License, all code available
+- **User Experience**: Clean interface with encrypted API key storage
+- **Open Source**: MIT License
 
 ## 🙏 Acknowledgments
 
