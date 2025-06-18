@@ -62,12 +62,12 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
     logo: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
     models: [
       {
-        id: "auto",
-        name: "Auto (Best for prompt)",
+        id: "custom",
+        name: "Custom Model (Enter any model ID)",
         contextLength: 128000,
-        description: "Automatically selects the best model for your prompt",
+        description: "Use any OpenRouter model by entering its ID (e.g., anthropic/claude-3-opus)",
         recommended: true,
-        strengths: ["Smart routing", "Cost-effective", "Reliable"],
+        strengths: ["Flexibility", "Access all models", "Latest releases"],
       },
       {
         id: "openai/gpt-5",

@@ -27,19 +27,19 @@ A modern AI chat application with support for OpenAI and Google Gemini, real-tim
 - 🎙️ **Voice Input**: Browser-based speech recognition
 - ⚡ **Cross-Tab Sync**: Instant sync between browser tabs
 - 📝 **Message Editing**: Edit and regenerate any message
-- 🔍 **Command Palette**: Quick actions with `/` commands
+- 🔍 **Slash Commands**: Quick actions like `/image`, `/search`, `/help`
 - 🔐 **Security**: Encrypted key storage, secure auth
 - 🔗 **URL Routing**: Direct links to specific chats (e.g., `/chat/8b1e049d-d7e8-4a60-8e1f-20d17ff411ba`)
 
 ## 🚀 Quick Start
 
 ### Try Online
-Visit [c3chat.vercel.app](https://c3chat.vercel.app) - no installation required!
+Visit [clone3chat.vercel.app](https://clone3chat.vercel.app) - no installation required!
 
 ### Run Locally
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/c3chat.git
+git clone https://github.com/tricodex/c3chat.git
 cd c3chat
 
 # Install dependencies
@@ -66,14 +66,7 @@ bun run dev
 
 ## 📸 Screenshots
 
-### Multi-Model Chat
-![Chat Interface](docs/screenshots/chat.png)
-
-### Image Generation
-![Image Generation](docs/screenshots/image-gen.png)
-
-### Chat Branching
-![Branching](docs/screenshots/branching.png)
+Screenshots coming soon!
 
 ## 🏗️ Architecture
 
@@ -110,10 +103,8 @@ VITE_CONVEX_URL=your-convex-url
 
 ## 📚 Documentation
 
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Redis Integration](docs/REDIS_INTEGRATION_SUMMARY.md)
-- [API Providers](docs/PROVIDERS.md)
-- [Contributing](CONTRIBUTING.md)
+- [Redis Integration](docs/REDIS_INTEGRATION_SUMMARY.md) - Optional caching layer
+- Additional documentation in progress
 
 ## 🏆 Competition Submission
 
@@ -121,7 +112,7 @@ This project was built for the T3 Chat Cloneathon, implementing all core require
 
 - **Unique Features**: Persistent URL routing for chats, cross-tab sync, voice input
 - **Code Quality**: TypeScript throughout, Convex for type-safe backend
-- **User Experience**: Clean design, streaming responses, works without API keys
+- **User Experience**: Clean design, streaming responses, works with Google Gemini by default (no API key needed)
 - **Open Source**: MIT License, all code available
 
 ## 🙏 Acknowledgments
