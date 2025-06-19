@@ -26,6 +26,7 @@ import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as knowledgeBase from "../knowledgeBase.js";
 import type * as messages from "../messages.js";
+import type * as payment from "../payment.js";
 import type * as projects from "../projects.js";
 import type * as promptTemplates from "../promptTemplates.js";
 import type * as router from "../router.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   knowledgeBase: typeof knowledgeBase;
   messages: typeof messages;
+  payment: typeof payment;
   projects: typeof projects;
   promptTemplates: typeof promptTemplates;
   router: typeof router;

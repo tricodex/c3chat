@@ -1,6 +1,7 @@
 import { useEnhancedSync, useSelectedThread } from "../lib/sync-engine-switcher";
 import { ModelSelector } from "./ModelSelector";
 import { SignOutButton } from "../SignOutButton";
+import { WalletConnect } from "./WalletConnect";
 import { Menu, Save, Sparkles, Cloud, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -75,6 +76,9 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
           <CloudOff className="w-3.5 h-3.5" style={{ color: 'var(--c3-error)' }} />
         )}
       </div>
+
+      {/* Wallet Connect - Optional */}
+      <WalletConnect />
 
       {/* User Menu */}
       <SignOutButton />

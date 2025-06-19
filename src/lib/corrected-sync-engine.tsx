@@ -449,6 +449,8 @@ interface SyncContextValue {
     updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
     deleteMessage: (messageId: string) => Promise<void>;
     generateImage: (prompt: string, threadId: string, provider?: string, apiKey?: string) => Promise<void>;
+    generateVideo: (prompt: string, threadId: string, provider?: string, model?: string, apiKey?: string) => Promise<void>;
+    processPayment: (paymentPrompt: string, threadId: string, provider: string, model: string, apiKey: string) => Promise<void>;
     clearThread: (threadId: string) => Promise<void>;
     sendSystemMessage: (content: string, threadId: string) => Promise<void>;
     createBranch: (threadId: string, messageId?: string) => Promise<string>;
@@ -989,6 +991,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const sendMessageWithContext = useAction(api.ai.sendMessageWithContext);
   const generateImageAction = useAction(api.aiMedia.generateImage);
   const generateVideoAction = useAction(api.aiMedia.generateVideo);
+  const processPaymentCommandAction = useAction(api.payment.processPaymentCommand);
   const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   
   // Thread actions
@@ -1734,6 +1737,89 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           id: assistantOptimisticId,
           updates: {
             content: `❌ Failed to generate video: ${error.message || 'Unknown error'}`,
+            isStreaming: false,
+            isOptimistic: true,
+          }
+        }});
+        
+        // Keep the user message but mark it as failed
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: userOptimisticId,
+          updates: {
+            isOptimistic: true,
+            error: true,
+          }
+        }});
+      }
+    },
+
+    processPayment: async (paymentPrompt: string, threadId: string, provider: string, model: string, apiKey: string) => {
+      if (!localDB.current) throw new Error('Local cache not initialized');
+      
+      // Create optimistic user message
+      const userOptimisticId = `temp_user_${nanoid()}` as Id<"messages">;
+      const userMessage: Message = {
+        _id: userOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'user',
+        content: `/pay ${paymentPrompt}`,
+        isOptimistic: true,
+        localCreatedAt: Date.now(),
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Create optimistic assistant message
+      const assistantOptimisticId = `temp_assistant_${nanoid()}` as Id<"messages">;
+      const assistantMessage: Message = {
+        _id: assistantOptimisticId,
+        threadId: threadId as Id<"threads">,
+        role: 'assistant',
+        content: "Processing payment request...",
+        isStreaming: true,
+        isOptimistic: true,
+        localCreatedAt: Date.now() + 1,
+        syncedToServer: false,
+        _version: 1,
+      };
+      
+      // Add to UI instantly
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: { threadId, message: userMessage }});
+      dispatch({ type: 'ADD_OPTIMISTIC_MESSAGE', payload: { threadId, message: assistantMessage }});
+      
+      // Store in local DB
+      await localDB.current.saveMessage(userMessage);
+      await localDB.current.saveMessage(assistantMessage);
+      
+      try {
+        // Create real user message
+        const userMessageId = await sendMessageMutation({
+          threadId: threadId as Id<"threads">,
+          role: 'user',
+          content: `/pay ${paymentPrompt}`,
+        });
+        
+        // Process payment with Gemini function calling
+        await processPaymentCommandAction({
+          paymentPrompt,
+          threadId: threadId as Id<"threads">,
+          userMessageId,
+          provider,
+          model,
+          apiKey,
+        });
+        
+        // Remove optimistic messages on success (real ones will come from Convex)
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: userOptimisticId });
+        dispatch({ type: 'REMOVE_OPTIMISTIC_MESSAGE', payload: assistantOptimisticId });
+      } catch (error: any) {
+        console.error('❌ Failed to process payment:', error);
+        
+        // Update the assistant message with the error instead of removing it
+        dispatch({ type: 'UPDATE_OPTIMISTIC_MESSAGE', payload: {
+          id: assistantOptimisticId,
+          updates: {
+            content: `❌ Failed to process payment: ${error.message || 'Unknown error'}`,
             isStreaming: false,
             isOptimistic: true,
           }

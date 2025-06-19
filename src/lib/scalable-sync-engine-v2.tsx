@@ -62,6 +62,14 @@ interface Message {
   _version?: number;
   _creationTime?: number;
   createdAt?: number;
+  toolCalls?: Array<{
+    id: string;
+    type: string;
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
 }
 
 // Circuit Breaker
@@ -385,6 +393,7 @@ interface SyncContextValue {
     deleteMessage: (messageId: string) => Promise<void>;
     generateImage: (prompt: string, threadId: string, provider: string, model: string, apiKey: string) => Promise<void>;
     generateVideo: (prompt: string, threadId: string, provider: string, model: string, apiKey: string) => Promise<void>;
+    processPayment: (paymentPrompt: string, threadId: string, provider: string, model: string, apiKey: string) => Promise<void>;
     regenerateResponse: (messageId: string, provider?: string, model?: string, apiKey?: string) => Promise<void>;
     createBranch: (threadId: string, fromMessageId?: string) => Promise<void>;
     shareThread: (threadId: string) => Promise<void>;
@@ -456,6 +465,7 @@ export const useMessages = (threadId?: string): Message[] => {
       isOptimistic: cached.isOptimistic || false,
       _creationTime: cached.timestamp,
       createdAt: cached.timestamp,
+      toolCalls: cached.toolCalls,
     }));
   }
   
@@ -541,6 +551,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const generateResponseAction = useAction(api.ai.generateResponse);
   const generateImageAction = useAction(api.ai.generateImage);
   const generateVideoAction = useAction(api.ai.generateVideo);
+  const processPaymentCommandAction = useAction(api.payment.processPaymentCommand);
   const regenerateResponseAction = useAction(api.ai.regenerateResponse);
   const createBranchMutation = useMutation(api.threads.createBranch);
   const shareThreadMutation = useMutation(api.threads.share);
@@ -714,6 +725,25 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       await generateVideoAction({ prompt, threadId: threadId as Id<"threads">, provider, model, apiKey });
     },
     
+    processPayment: async (paymentPrompt: string, threadId: string, provider: string, model: string, apiKey: string) => {
+      // Create user message first
+      const userMessageId = await sendMessageMutation({
+        threadId: threadId as Id<"threads">,
+        role: "user",
+        content: `/pay ${paymentPrompt}`,
+      });
+      
+      // Process payment with Gemini function calling
+      await processPaymentCommandAction({ 
+        paymentPrompt, 
+        threadId: threadId as Id<"threads">,
+        userMessageId,
+        provider, 
+        model, 
+        apiKey,
+      });
+    },
+    
     regenerateResponse: async (messageId: string, provider?: string, model?: string, apiKey?: string) => {
       await regenerateResponseAction({
         messageId: messageId as Id<"messages">,
@@ -881,6 +911,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
           timestamp: msg._creationTime || Date.now(),
           version: 1,
           isOptimistic: false,
+          toolCalls: msg.toolCalls,
           metadata: {
             provider: msg.provider,
             model: msg.model,
@@ -891,6 +922,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             attachments: msg.attachments || [],
             isStreaming: msg.isStreaming,
             cursor: msg.cursor,
+            toolCalls: msg.toolCalls,
           },
         })),
         startCursor: uniqueMessages[0]?._id || '',
@@ -959,6 +991,7 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
                   role: msg.role,
                   timestamp: msg._creationTime || Date.now(),
                   version: 1,
+                  toolCalls: msg.toolCalls,
                   metadata: {
                     provider: msg.provider,
                     model: msg.model,

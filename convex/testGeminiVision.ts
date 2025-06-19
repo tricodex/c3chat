@@ -14,8 +14,6 @@ export const testGeminiVision = action({
       
       // Initialize Gemini
       const genAI = new GoogleGenAI({ apiKey: args.apiKey });
-      const model = genAI.getGenerativeModel({ model: args.model });
-      
       // Fetch image
       const response = await fetch(args.imageUrl);
       const blob = await response.blob();
@@ -61,9 +59,12 @@ export const testGeminiVision = action({
         imageDataLength: base64.length
       });
       
-      // Generate response
-      const result = await model.generateContent(request);
-      const response_text = result.response.text();
+      // Generate response using the new API
+      const result = await genAI.models.generateContent({
+        model: args.model,
+        ...request
+      });
+      const response_text = result.text || "No response generated";
       
       console.log("✅ Gemini response:", response_text);
       

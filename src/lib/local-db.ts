@@ -44,6 +44,14 @@ export interface StoredMessage {
   isOptimistic?: boolean;
   localCreatedAt?: number;
   syncedToServer?: boolean;
+  toolCalls?: Array<{
+    id: string;
+    type: string;
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
 }
 
 export interface DatabaseMetadata {

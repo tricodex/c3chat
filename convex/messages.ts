@@ -61,7 +61,8 @@ export const list = query({
         isStreaming: m.isStreaming,
         cursor: m.cursor,
         contentPreview: m.content ? m.content.substring(0, 30) + '...' : '[empty]',
-        attachmentCount: m.attachments?.length || 0
+        attachmentCount: m.attachments?.length || 0,
+        toolCalls: m.toolCalls
       }))
     });
 
@@ -164,6 +165,14 @@ export const updateContent = internalMutation({
     outputTokens: v.optional(v.number()),
     generatedImageUrl: v.optional(v.string()),
     generatedVideoUrl: v.optional(v.string()),
+    toolCalls: v.optional(v.array(v.object({
+      id: v.string(),
+      type: v.string(),
+      function: v.object({
+        name: v.string(),
+        arguments: v.string(),
+      }),
+    }))),
   },
   handler: async (ctx, args) => {
     console.log("📝 Updating message content:", {
@@ -171,6 +180,7 @@ export const updateContent = internalMutation({
       contentLength: args.content.length,
       isStreaming: args.isStreaming,
       cursor: args.cursor,
+      toolCalls: args.toolCalls,
       contentPreview: args.content.substring(0, 50) + '...'
     });
     
@@ -184,6 +194,7 @@ export const updateContent = internalMutation({
     if (args.outputTokens !== undefined) updates.outputTokens = args.outputTokens;
     if (args.generatedImageUrl !== undefined) updates.generatedImageUrl = args.generatedImageUrl;
     if (args.generatedVideoUrl !== undefined) updates.generatedVideoUrl = args.generatedVideoUrl;
+    if (args.toolCalls !== undefined) updates.toolCalls = args.toolCalls;
     
     await ctx.db.patch(args.messageId, updates);
     

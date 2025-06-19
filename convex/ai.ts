@@ -141,6 +141,8 @@ export const generateResponse = action({
     model: v.string(),
     apiKey: v.optional(v.string()),
     systemPrompt: v.optional(v.string()),
+    temperature: v.optional(v.number()),
+    maxTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // Create assistant message with cursor
@@ -377,8 +379,11 @@ export const generateResponse = action({
             return; // Don't throw, just return early
           }
 
-          // Get the generative model instance
-          const model = genAI.getGenerativeModel({ model: args.model });
+          // Create generation config
+          const generationConfig = {
+            temperature: args.temperature || 0.7,
+            maxOutputTokens: args.maxTokens || 8192,
+          };
 
           // Convert conversation history to Google AI format
           const contents = conversationHistory
@@ -439,9 +444,10 @@ export const generateResponse = action({
             };
           }
           
-          const stream = await model.generateContentStream({
+          const stream = await genAI.models.generateContentStream({
+            model: args.model,
             contents,
-            generationConfig: config,
+            config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -519,6 +525,8 @@ export const sendMessage = action({
     apiKey: v.optional(v.string()), // For BYOK
     attachmentIds: v.optional(v.array(v.id("attachments"))),
     systemPrompt: v.optional(v.string()),
+    temperature: v.optional(v.number()),
+    maxTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // Create user message
@@ -772,8 +780,11 @@ export const sendMessage = action({
             return; // Don't throw, just return early
           }
 
-          // Get the generative model instance
-          const model = genAI.getGenerativeModel({ model: args.model });
+          // Create generation config
+          const generationConfig = {
+            temperature: args.temperature || 0.7,
+            maxOutputTokens: args.maxTokens || 8192,
+          };
 
           // Convert conversation history to Google AI format
           const contents = conversationHistory
@@ -834,9 +845,10 @@ export const sendMessage = action({
             };
           }
           
-          const stream = await model.generateContentStream({
+          const stream = await genAI.models.generateContentStream({
+            model: args.model,
             contents,
-            generationConfig: config,
+            config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -1133,7 +1145,6 @@ export const regenerateResponse = action({
           if (!finalApiKey) throw new Error("Google API key required");
           
           const genAI = new GoogleGenAI({ apiKey: finalApiKey });
-          const modelInstance = genAI.getGenerativeModel({ model });
           
           const contents = conversationHistory
             .filter((msg) => msg.role !== "system")
@@ -1170,9 +1181,10 @@ export const regenerateResponse = action({
             };
           }
           
-          const stream = await modelInstance.generateContentStream({
+          const stream = await genAI.models.generateContentStream({
+            model,
             contents,
-            generationConfig: config,
+            config,
           });
           
           for await (const chunk of stream) {
@@ -1404,7 +1416,6 @@ export const sendMessageWithContext = action({
           if (!apiKey) throw new Error("Google API key required");
 
           const genAI = new GoogleGenAI({ apiKey });
-          const model = genAI.getGenerativeModel({ model: args.model });
 
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system")
@@ -1440,9 +1451,10 @@ export const sendMessageWithContext = action({
             };
           }
           
-          const stream = await model.generateContentStream({
+          const stream = await genAI.models.generateContentStream({
+            model: args.model,
             contents,
-            generationConfig: config,
+            config,
           });
 
           for await (const chunk of stream) {

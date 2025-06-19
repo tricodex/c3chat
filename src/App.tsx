@@ -11,6 +11,7 @@ import { Header } from "./components/Header";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CommandPalette } from "./components/CommandPalette";
 import { SecurityInitializer } from "./components/SecurityInitializer";
+import { WalletProvider } from "./components/WalletProvider";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { DebugPanel } from "./components/DebugPanel";
 
@@ -40,22 +41,24 @@ export default function App() {
   return (
     <ErrorBoundary>
       <SecurityInitializer>
-        <BrowserRouter>
-          <div id="root">
-            <Toaster 
-              position="top-center"
-              toastOptions={{
-                style: {
-                  background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
-                  color: 'var(--c3-text-primary)',
-                  border: '1px solid var(--c3-border-subtle)',
-                  borderRadius: 'var(--c3-radius-lg)',
-                },
-              }}
-            />
-            <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-          </div>
-        </BrowserRouter>
+        <WalletProvider>
+          <BrowserRouter>
+            <div id="root">
+              <Toaster 
+                position="top-center"
+                toastOptions={{
+                  style: {
+                    background: theme === 'dark' ? 'var(--c3-surface-primary)' : 'white',
+                    color: 'var(--c3-text-primary)',
+                    border: '1px solid var(--c3-border-subtle)',
+                    borderRadius: 'var(--c3-radius-lg)',
+                  },
+                }}
+              />
+              <Content theme={theme} setTheme={setTheme} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+            </div>
+          </BrowserRouter>
+        </WalletProvider>
       </SecurityInitializer>
     </ErrorBoundary>
   );

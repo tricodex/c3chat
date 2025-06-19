@@ -54,6 +54,14 @@ export interface CachedMessage {
   timestamp: number;
   version: number;
   isOptimistic?: boolean;
+  toolCalls?: Array<{
+    id: string;
+    type: string;
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
   metadata?: Record<string, any>;
 }
 

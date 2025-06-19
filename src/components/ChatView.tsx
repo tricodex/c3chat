@@ -10,9 +10,10 @@ import { TokenUsageBar } from "./TokenUsageBar";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "./ui/Tooltip";
 import { Id } from "../../convex/_generated/dataModel";
-import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Video, Trash2, FileText, X } from "lucide-react";
+import { Brain, Zap, GitBranch, Download, ChartBar, Globe, Search, BookOpen, TrendingUp, HelpCircle, ChevronDown, Image, Video, Trash2, FileText, X, Wallet } from "lucide-react";
 import { getStoredApiKey, AI_PROVIDERS } from "../lib/ai-providers";
 import { getAgentSystemPrompt, getAgentTemperature } from "../lib/ai-agents";
+import { PaymentHandler } from "./PaymentHandler";
 
 export function ChatView() {
   const { actions, state } = useEnhancedSync();
@@ -254,6 +255,25 @@ export function ChatView() {
             await actions.generateVideo(videoPrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
             break;
           }
+          
+          case "pay": {
+            if (args.length < 2) {
+              toast.error("Please use format: /pay [amount] [address]");
+              setInput(content);
+              return;
+            }
+            
+            // Check if using Gemini models
+            if (selectedProvider !== "google" || !selectedModel.includes("gemini")) {
+              toast.error("Payment commands are only available with Google Gemini models");
+              setInput(content);
+              return;
+            }
+            
+            const paymentPrompt = args.join(" ");
+            await actions.processPayment(paymentPrompt, selectedThread._id, selectedProvider, selectedModel, apiKey);
+            break;
+          }
             
           case "search": {
             if (args.length === 0) {
@@ -402,6 +422,9 @@ export function ChatView() {
 
   return (
     <div className="c3-chat-container">
+      {/* Payment Handler - invisible component that watches for payment messages */}
+      <PaymentHandler />
+      
       {/* Control Bar */}
       <div className="c3-chat-controls">
         <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'var(--c3-border-subtle)' }}>
@@ -485,6 +508,25 @@ export function ChatView() {
                             <div>
                               <div className="text-xs text-gray-900 dark:text-gray-100">Generate AI videos (Veo)</div>
                               <div className="text-xs text-gray-600 dark:text-gray-400">Example: /video waves crashing on beach</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Payment - Only show if using Gemini models */}
+                    {selectedProvider === "google" && selectedModel.includes("gemini") && (
+                      <div className="p-3 border-b border-[var(--c3-border-subtle)]">
+                        <h4 className="text-xs font-medium text-[var(--c3-primary)] mb-2 flex items-center gap-1">
+                          <Wallet className="w-3 h-3" />
+                          Web3 Payments (Gemini Only)
+                        </h4>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <code className="text-xs bg-gray-800 dark:bg-gray-200 px-1.5 py-0.5 rounded font-mono text-white dark:text-gray-900">/pay</code>
+                            <div>
+                              <div className="text-xs text-gray-900 dark:text-gray-100">Send USDC on Base Sepolia</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Example: /pay 1.56 0xABCD...</div>
                             </div>
                           </div>
                         </div>

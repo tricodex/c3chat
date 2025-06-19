@@ -18,7 +18,7 @@ if (import.meta.env.DEV) {
 }
 
 // Force Redis to use the environment variables
-if (url && token) {
+if (url && token && typeof window !== 'undefined') {
   // Store in window object for debugging
   (window as any).__REDIS_CONFIG = { url, token };
 }
