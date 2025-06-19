@@ -180,6 +180,7 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 
 These features have partial/no implementations or UI without backend or vice versa:
 
+- **Proper verified auth**: I currently have basic Convex auth, it is supposedly secure, but there is no email verification, regex etc.
 - **Automated Chat Naming**: Not implemented
 - **Thread branching**: UI exists (`/branch` command) but functionality bugged
 - **Export conversations**: Commands shown but export not implemented
