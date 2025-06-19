@@ -6,13 +6,14 @@
 A multi-model AI chat interface built for the T3 Chat Cloneathon. Works with Gemini and OpenRouter models (tested with GPT-4o-mini, DeepSeek-R1, Llama-70B).
 
 **Demo**: [clone3chat.vercel.app](https://clone3chat.vercel.app)  
-**Note**: Don't use real passwords - auth security not fully verified.
+**Note**: Don't use real passwords - should be secure, but not fully verified.
 
-First time deploying with Vite instead of my usual Next.js - the padding you see in the screenshot doesn't show up in production and I ran out of time to debug why. The CSS is there, it just... doesn't apply.
 
 ## What I Built
 
-A chat app that syncs messages instantly across tabs using Convex. Each conversation gets a URL (`/chat/{id}`). API keys are encrypted client-side and never leave your browser. YOU CAN MAKE STABLECOIN PAYMENTS with USDC
+A single page chat app that syncs messages instantly locally and across tabs using Convex, heavily inspired by [Theo](https://www.youtube.com/watch?v=xFVh9beupwo). Each conversation gets a URL (`/chat/{id}`). API keys are encrypted client-side and never leave your browser. YOU CAN MAKE STABLECOIN PAYMENTS with USDC. [Theo talkin bout stablecoins.](https://www.youtube.com/watch?v=D29swWwYXkI)  
+
+Messages appear instantly and sync across every tab by sending only the small part that changed, not the whole list, so the UI never stalls. Behind the scenes a short-lived Redis lock stops two tabs from writing the same thread at once, while batched 100 ms streaming keeps bandwidth low and scrolling smooth. If a user goes offline the app still shows their message right away, stores it with a 60-second expiry, and reconciles safely when the connection returns unused uploads and stale temp data are cleared automatically. All timestamps come from the server, I load just the 50–100 messages in view, and the app keeps working even if Redis drops, so crashes, duplicates, and clock-skew bugs never reach the user.
 
 ### Tested Features
 - Google Gemini (free tier)
@@ -129,7 +130,7 @@ VITE_KV_REST_API_URL=your-upstash-url
 VITE_KV_REST_API_TOKEN=your-upstash-token
 ```
 
-## What Didn't Work
+## Struggles
 
 1. **Message Deduplication**: Initially deduped after state updates, causing React key warnings. Fixed in `scalable-sync-engine-v2.tsx`.
 2. **Browser Fingerprinting**: Keys got lost on browser updates. Switched to persistent random keys.
@@ -160,7 +161,7 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 - **Thread management**: Create, delete conversations
 - **Mobile responsive**: Works on all screen sizes
 
-### Advanced
+### Extra (wips)
 - **Token tracking**: See usage and costs per message (`src/components/TokenUsageBar.tsx`)
 - **Encrypted API keys**: Client-side AES-GCM encryption
 - **AI agents**: Specialized prompts (Research, Code Expert, Creative)
@@ -168,10 +169,10 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 
 ### Web3 (Experimental)
 - **Wallet integration**: MetaMask/WalletConnect (`src/components/WalletConnect.tsx`)
-- **USDC payments**: `/pay` command on Base Sepolia testnet (Gemini models only)
+- **USDC payments**: `/pay` command on Base Sepolia testnet **(Gemini models only)**
 - **Get test USDC**: [Base Sepolia Faucet](https://faucet.circle.com/)
 
-## Work in Progress (WIP)
+## Work in Progress
 
 These features have partial implementations or UI without backend:
 
@@ -184,4 +185,4 @@ These features have partial implementations or UI without backend:
 
 ---
 
-Built in a week for the [T3 Chat Cloneathon](https://cloneathon.t3.chat/). Prize deadline: June 18, 2025.
+Built in a week for the [T3 Chat Cloneathon](https://cloneathon.t3.chat/).
