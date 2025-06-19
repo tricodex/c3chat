@@ -343,6 +343,9 @@ export const generateResponse = action({
             return; // Don't throw, just return early
           }
 
+          // Get the generative model instance
+          const model = genAI.getGenerativeModel({ model: args.model });
+
           // Convert conversation history to Google AI format
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system") // Filter out system messages
@@ -402,10 +405,9 @@ export const generateResponse = action({
             };
           }
           
-          const stream = await genAI.models.generateContentStream({
-            model: args.model,
+          const stream = await model.generateContentStream({
             contents,
-            config,
+            generationConfig: config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -702,6 +704,9 @@ export const sendMessage = action({
             return; // Don't throw, just return early
           }
 
+          // Get the generative model instance
+          const model = genAI.getGenerativeModel({ model: args.model });
+
           // Convert conversation history to Google AI format
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system") // Filter out system messages
@@ -761,10 +766,9 @@ export const sendMessage = action({
             };
           }
           
-          const stream = await genAI.models.generateContentStream({
-            model: args.model,
+          const stream = await model.generateContentStream({
             contents,
-            config,
+            generationConfig: config,
           });
 
           // The result is an async generator, iterate over it directly
@@ -1061,6 +1065,7 @@ export const regenerateResponse = action({
           if (!finalApiKey) throw new Error("Google API key required");
           
           const genAI = new GoogleGenAI({ apiKey: finalApiKey });
+          const modelInstance = genAI.getGenerativeModel({ model });
           
           const contents = conversationHistory
             .filter((msg) => msg.role !== "system")
@@ -1097,10 +1102,9 @@ export const regenerateResponse = action({
             };
           }
           
-          const stream = await genAI.models.generateContentStream({
-            model,
+          const stream = await modelInstance.generateContentStream({
             contents,
-            config,
+            generationConfig: config,
           });
           
           for await (const chunk of stream) {
@@ -1332,6 +1336,7 @@ export const sendMessageWithContext = action({
           if (!apiKey) throw new Error("Google API key required");
 
           const genAI = new GoogleGenAI({ apiKey });
+          const model = genAI.getGenerativeModel({ model: args.model });
 
           const contents = conversationHistory
             .filter((msg: any) => msg.role !== "system")
@@ -1367,10 +1372,9 @@ export const sendMessageWithContext = action({
             };
           }
           
-          const stream = await genAI.models.generateContentStream({
-            model: args.model,
+          const stream = await model.generateContentStream({
             contents,
-            config,
+            generationConfig: config,
           });
 
           for await (const chunk of stream) {
