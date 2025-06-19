@@ -1,7 +1,7 @@
 # C3Chat
 
 ![C3Chat Interface](public/app.png)
-*This is what it looks like with padding*
+*This is what it looks like with padding, for some reason in production it's not applied, not sure why and didnt have time, first time for me that I deployed a vite app, normally I do nextjs*
 
 A multi-model AI chat interface built for the T3 Chat Cloneathon. Works with Gemini and OpenRouter models (tested with GPT-4o-mini, DeepSeek-R1, Llama-70B).
 
@@ -146,7 +146,7 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 ## Features
 
 ### Core
-- **Multi-provider AI chat**: OpenAI, Gemini, Anthropic (via OpenRouter), DeepSeek
+- **Multi-provider AI chat**: OpenAI, Gemini, Anthropic, DeepSeek (via OpenRouter)
 - **Real-time sync**: Messages appear instantly across tabs
 - **Voice input/output**: 11+ languages with adjustable speech settings (`src/components/VoiceControls.tsx`)
 - **File attachments**: Drag & drop images/PDFs with preview (`src/components/FileUpload.tsx`)
@@ -175,9 +175,9 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 
 These features have partial implementations or UI without backend:
 
-- **Thread branching**: UI exists (`/branch` command) but functionality incomplete
+- **Thread branching**: UI exists (`/branch` command) but functionality bugged
 - **Export conversations**: Commands shown but export not implemented
-- **Message editing**: Not implemented
+- **Message editing**: Bugged
 - **Thread archiving**: Not implemented
 - **Projects/Workspaces**: Backend exists (`convex/projects.ts`) but no UI
 - **Security audit**: Not conducted - use throwaway passwords
