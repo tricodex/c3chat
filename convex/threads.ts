@@ -2,7 +2,7 @@ import { query, mutation, internalQuery, action } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { nanoid } from "nanoid";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 export const list = query({
   args: {
@@ -657,8 +657,17 @@ export const remove = mutation({
       .collect();
 
     for (const message of messages) {
+      // Clean up attachments for each message
+      await ctx.scheduler.runAfter(0, internal.attachmentCleanup.cleanupMessageAttachments, {
+        messageId: message._id,
+      });
       await ctx.db.delete(message._id);
     }
+
+    // Also clean up any attachments directly linked to the thread
+    await ctx.scheduler.runAfter(0, internal.attachmentCleanup.cleanupThreadAttachments, {
+      threadId: args.threadId,
+    });
 
     // Update project stats if applicable
     if (thread.projectId) {

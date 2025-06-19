@@ -586,25 +586,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Clear viewport to force fresh load
         dispatch({ type: 'SET_VIEWPORT', payload: null });
         
-        if (threadId && isRedisEnabled) {
-          try {
-            // Small delay to allow Convex query to start
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Try to load from Redis first (for faster initial display)
-            const viewport = await redisCache.current.getViewport(threadId);
-            if (viewport && viewport.messages.length > 0) {
-              console.log('✅ Loaded viewport from Redis with', viewport.messages.length, 'messages');
-              dispatch({ type: 'SET_VIEWPORT', payload: viewport });
-            } else {
-              console.log('⚠️ Empty or no viewport in Redis, waiting for Convex messages');
-            }
-            // Convex messages will update the viewport when they arrive
-          } catch (error) {
-            console.error('Failed to load viewport from Redis:', error);
-            // Continue - Convex messages will populate the viewport
-          }
-        }
+        // Don't load viewport here - let convexMessages effect handle it
+        // This prevents double-loading and UI flash
       } finally {
         if (lockAcquired && isRedisEnabled) {
           await redisCache.current.releaseLock(lockKey);
@@ -858,6 +841,20 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const lastSyncedContentRef = useRef<Map<string, string>>(new Map());
   const isStreamingRef = useRef<Set<string>>(new Set());
   
+  // Deduplication utility to prevent React key warnings
+  const deduplicateMessages = useCallback((messages: Message[]): Message[] => {
+    const seen = new Set<string>();
+    return messages.filter(msg => {
+      const id = String(msg._id);
+      if (seen.has(id)) {
+        console.warn(`Duplicate message filtered before state update: ${id}`);
+        return false;
+      }
+      seen.add(id);
+      return true;
+    });
+  }, []);
+  
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
       // Clear any pending sync
@@ -865,18 +862,14 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         clearTimeout(syncTimeoutRef.current);
       }
       
-      // Set messages immediately for UI responsiveness
+      // CRITICAL: Deduplicate BEFORE setting state to prevent React warnings
+      const uniqueMessages = deduplicateMessages(convexMessages);
+      
+      // Set deduplicated messages for UI responsiveness
       dispatch({ type: 'SET_MESSAGES_FROM_CONVEX', payload: {
         threadId: state.selectedThreadId,
-        messages: convexMessages,
+        messages: uniqueMessages,
       }});
-      
-      // CRITICAL FIX: Update viewport immediately with convex messages
-      // This ensures UI updates right away without waiting for Redis
-      // Deduplicate messages to prevent duplicate key errors
-      const uniqueMessages = Array.from(
-        new Map(convexMessages.map(msg => [msg._id, msg])).values()
-      );
       
       const immediateViewport = {
         threadId: state.selectedThreadId,

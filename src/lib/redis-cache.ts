@@ -107,10 +107,33 @@ export class RedisCache {
     timeoutId?: NodeJS.Timeout;
   }>();
   
+  // Periodic cleanup interval
+  private cleanupIntervalId?: NodeJS.Timeout;
+  
   constructor() {
     this.tabId = nanoid();
     this.memoryCache = new Map();
     this.subscriptions = new Map();
+    
+    // Start periodic cleanup of stale streaming buffers (every 5 minutes)
+    this.cleanupIntervalId = setInterval(() => {
+      this.cleanupStaleStreamingBuffers();
+    }, 5 * 60 * 1000);
+  }
+  
+  private cleanupStaleStreamingBuffers(): void {
+    const now = Date.now();
+    const staleThreshold = 10 * 60 * 1000; // 10 minutes
+    
+    for (const [messageId, buffer] of this.streamingBuffer.entries()) {
+      if (now - buffer.lastUpdate > staleThreshold) {
+        if (buffer.timeoutId) {
+          clearTimeout(buffer.timeoutId);
+        }
+        this.streamingBuffer.delete(messageId);
+        console.warn(`Cleaned up stale streaming buffer for message ${messageId}`);
+      }
+    }
   }
   
   // Thread operations
@@ -418,6 +441,15 @@ export class RedisCache {
       }
       
       this.streamingBuffer.get(messageId)!.lastUpdate = now;
+      
+      // Clean up buffer if message is complete (forceFlush)
+      if (forceFlush) {
+        const bufferEntry = this.streamingBuffer.get(messageId);
+        if (bufferEntry?.timeoutId) {
+          clearTimeout(bufferEntry.timeoutId);
+        }
+        this.streamingBuffer.delete(messageId);
+      }
     } else {
       // Schedule update
       const timeoutId = setTimeout(() => {
@@ -663,6 +695,20 @@ export class RedisCache {
   // Cleanup
   async cleanup(): Promise<void> {
     try {
+      // Clear periodic cleanup interval
+      if (this.cleanupIntervalId) {
+        clearInterval(this.cleanupIntervalId);
+        this.cleanupIntervalId = undefined;
+      }
+      
+      // Clean up streaming buffers
+      this.streamingBuffer.forEach((buffer) => {
+        if (buffer.timeoutId) {
+          clearTimeout(buffer.timeoutId);
+        }
+      });
+      this.streamingBuffer.clear();
+      
       // Only run cleanup if Redis is configured
       if (!isRedisConfigured()) {
         this.memoryCache.clear();

@@ -28,16 +28,39 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
   );
 }
 
-// Generate a unique key for each user/browser combination
-function getUserKey(): string {
-  // Combine multiple browser fingerprints for uniqueness
+// Generate or retrieve a persistent encryption key
+async function getUserKey(): Promise<string> {
+  const STORAGE_KEY = 'c3chat_encryption_key_v2';
+  
+  // Try to get existing key from localStorage
+  const existingKey = localStorage.getItem(STORAGE_KEY);
+  if (existingKey) {
+    return existingKey;
+  }
+  
+  // Generate a new random key if none exists
+  const randomBytes = new Uint8Array(32);
+  crypto.getRandomValues(randomBytes);
+  const newKey = btoa(String.fromCharCode(...randomBytes));
+  
+  // Store for future use
+  localStorage.setItem(STORAGE_KEY, newKey);
+  
+  // Also create a backup using browser fingerprint for migration
+  const fingerprint = generateBrowserFingerprint();
+  localStorage.setItem(`${STORAGE_KEY}_fingerprint`, fingerprint);
+  
+  return newKey;
+}
+
+// Generate browser fingerprint for fallback/migration
+function generateBrowserFingerprint(): string {
   const userAgent = navigator.userAgent;
   const language = navigator.language;
   const platform = navigator.platform;
   const screenResolution = `${screen.width}x${screen.height}`;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   
-  // Create a unique browser fingerprint
   return `${userAgent}-${language}-${platform}-${screenResolution}-${timezone}`;
 }
 
@@ -51,8 +74,9 @@ export async function encryptData(plaintext: string): Promise<string> {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     
-    // Derive key from browser fingerprint
-    const key = await deriveKey(getUserKey(), salt);
+    // Derive key from persistent user key
+    const userKey = await getUserKey();
+    const key = await deriveKey(userKey, salt);
     
     // Encrypt the data
     const encryptedData = await crypto.subtle.encrypt(
@@ -87,7 +111,8 @@ export async function decryptData(encryptedBase64: string): Promise<string> {
     const encryptedData = combined.slice(28);
     
     // Derive the same key
-    const key = await deriveKey(getUserKey(), salt);
+    const userKey = await getUserKey();
+    const key = await deriveKey(userKey, salt);
     
     // Decrypt the data
     const decryptedData = await crypto.subtle.decrypt(
@@ -110,6 +135,47 @@ export function isCryptoAvailable(): boolean {
   return typeof crypto !== 'undefined' && 
          typeof crypto.subtle !== 'undefined' &&
          typeof crypto.getRandomValues === 'function';
+}
+
+// Migrate encrypted data from old fingerprint-based key to new persistent key
+export async function migrateEncryptedData(encryptedBase64: string): Promise<string | null> {
+  try {
+    // First try to decrypt with current key
+    const decrypted = await decryptData(encryptedBase64);
+    return decrypted;
+  } catch (error) {
+    console.log('Failed with current key, trying fingerprint-based migration...');
+    
+    try {
+      // Try to decrypt with fingerprint-based key
+      const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+      const salt = combined.slice(0, 16);
+      const iv = combined.slice(16, 28);
+      const encryptedData = combined.slice(28);
+      
+      // Use the old fingerprint method
+      const fingerprint = generateBrowserFingerprint();
+      const key = await deriveKey(fingerprint, salt);
+      
+      const decryptedData = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encryptedData
+      );
+      
+      const decoder = new TextDecoder();
+      const decryptedText = decoder.decode(decryptedData);
+      
+      // Re-encrypt with new persistent key
+      const reencrypted = await encryptData(decryptedText);
+      
+      console.log('Successfully migrated encrypted data to persistent key');
+      return decryptedText;
+    } catch (migrationError) {
+      console.error('Migration failed:', migrationError);
+      return null;
+    }
+  }
 }
 
 // Secure storage wrapper with automatic encryption/decryption
@@ -150,7 +216,22 @@ export const secureStorage = {
       const encrypted = localStorage.getItem(key + '_encrypted');
       if (!encrypted) return null;
       
-      return await decryptData(encrypted);
+      // Try to decrypt, with migration fallback
+      const decrypted = await migrateEncryptedData(encrypted);
+      
+      // If migration happened, update storage with new encryption
+      if (decrypted !== null) {
+        try {
+          const currentDecrypted = await decryptData(encrypted);
+          // If we can decrypt with current key, no migration needed
+        } catch {
+          // Migration was needed, update storage
+          const reencrypted = await encryptData(decrypted);
+          localStorage.setItem(key + '_encrypted', reencrypted);
+        }
+      }
+      
+      return decrypted;
     } catch (error) {
       console.error('Decryption failed:', error);
       // Try to return plain text as fallback

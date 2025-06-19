@@ -1,6 +1,7 @@
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 
 export const list = query({
   args: {
@@ -281,5 +282,39 @@ export const getWithAttachments = query({
       attachments,
       searchResults,
     };
+  },
+});
+
+// Delete a message and its attachments
+export const remove = mutation({
+  args: {
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    // Verify user owns the thread
+    const thread = await ctx.db.get(message.threadId);
+    if (!thread || thread.userId !== userId) {
+      throw new Error("Not authorized");
+    }
+
+    // Clean up attachments associated with this message
+    await ctx.scheduler.runAfter(0, internal.attachmentCleanup.cleanupMessageAttachments, {
+      messageId: args.messageId,
+    });
+
+    // Delete the message
+    await ctx.db.delete(args.messageId);
+
+    return { success: true };
   },
 });
