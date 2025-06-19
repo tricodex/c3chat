@@ -29,6 +29,7 @@ import type * as messages from "../messages.js";
 import type * as projects from "../projects.js";
 import type * as promptTemplates from "../promptTemplates.js";
 import type * as router from "../router.js";
+import type * as testGeminiVision from "../testGeminiVision.js";
 import type * as threads from "../threads.js";
 import type * as userSettings from "../userSettings.js";
 import type * as utils_streamBuffer from "../utils/streamBuffer.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   promptTemplates: typeof promptTemplates;
   router: typeof router;
+  testGeminiVision: typeof testGeminiVision;
   threads: typeof threads;
   userSettings: typeof userSettings;
   "utils/streamBuffer": typeof utils_streamBuffer;

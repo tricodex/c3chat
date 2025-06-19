@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Gemini Vision</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .error {
+            background: #fee;
+            color: #c00;
+        }
+        .success {
+            background: #efe;
+            color: #060;
+        }
+        #preview {
+            max-width: 300px;
+            margin-top: 10px;
+        }
+        #preview img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Gemini Vision API</h1>
+        
+        <div class="form-group">
+            <label for="apiKey">Google API Key:</label>
+            <input type="password" id="apiKey" placeholder="Enter your Google API key">
+        </div>
+        
+        <div class="form-group">
+            <label for="model">Model:</label>
+            <select id="model">
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="imageUrl">Image URL (or use file upload below):</label>
+            <input type="url" id="imageUrl" placeholder="https://example.com/image.jpg">
+        </div>
+        
+        <div class="form-group">
+            <label for="imageFile">Or upload an image:</label>
+            <input type="file" id="imageFile" accept="image/*">
+            <div id="preview"></div>
+        </div>
+        
+        <button id="testButton" onclick="runTest()">Run Vision Test</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Load API key from localStorage if available
+        window.onload = () => {
+            const savedKey = localStorage.getItem('c3chat_api_key_google');
+            if (savedKey) {
+                document.getElementById('apiKey').value = savedKey;
+            }
+        };
+
+        // Handle file upload
+        document.getElementById('imageFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const dataUrl = e.target.result;
+                    document.getElementById('imageUrl').value = dataUrl;
+                    document.getElementById('preview').innerHTML = `<img src="${dataUrl}" alt="Preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        async function runTest() {
+            const apiKey = document.getElementById('apiKey').value;
+            const model = document.getElementById('model').value;
+            const imageUrl = document.getElementById('imageUrl').value;
+            const resultDiv = document.getElementById('result');
+            const button = document.getElementById('testButton');
+            
+            if (!apiKey || !model || !imageUrl) {
+                resultDiv.innerHTML = '<div class="error">Please fill in all fields</div>';
+                return;
+            }
+            
+            button.disabled = true;
+            button.textContent = 'Testing...';
+            resultDiv.innerHTML = '<div>Running test...</div>';
+            
+            try {
+                // Initialize Google GenAI directly in browser for testing
+                const { GoogleGenAI } = await import('@google/genai');
+                const genAI = new GoogleGenAI({ apiKey });
+                const modelInstance = genAI.getGenerativeModel({ model });
+                
+                // Convert image URL to base64
+                let base64Data;
+                let mimeType = 'image/jpeg';
+                
+                if (imageUrl.startsWith('data:')) {
+                    // Extract base64 from data URL
+                    const matches = imageUrl.match(/^data:(.+);base64,(.+)$/);
+                    if (matches) {
+                        mimeType = matches[1];
+                        base64Data = matches[2];
+                    }
+                } else {
+                    // Fetch external URL
+                    const response = await fetch(imageUrl);
+                    const blob = await response.blob();
+                    mimeType = blob.type || 'image/jpeg';
+                    
+                    const buffer = await blob.arrayBuffer();
+                    const uint8Array = new Uint8Array(buffer);
+                    const chunks = [];
+                    const chunkSize = 8192;
+                    
+                    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                        const chunk = uint8Array.slice(i, i + chunkSize);
+                        chunks.push(String.fromCharCode(...chunk));
+                    }
+                    base64Data = btoa(chunks.join(''));
+                }
+                
+                console.log('Image data prepared:', {
+                    mimeType,
+                    base64Length: base64Data.length
+                });
+                
+                // Create request
+                const request = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: "What do you see in this image? Please describe it in detail." },
+                            {
+                                inlineData: {
+                                    mimeType: mimeType,
+                                    data: base64Data
+                                }
+                            }
+                        ]
+                    }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 1024,
+                    }
+                };
+                
+                console.log('Sending request to Gemini...');
+                const result = await modelInstance.generateContent(request);
+                const response = result.response.text();
+                
+                resultDiv.className = 'success';
+                resultDiv.innerHTML = `<strong>✅ Success!</strong>\n\nModel: ${model}\n\nResponse:\n${response}`;
+                
+            } catch (error) {
+                console.error('Test failed:', error);
+                resultDiv.className = 'error';
+                resultDiv.innerHTML = `<strong>❌ Error:</strong>\n\n${error.message}\n\nModel: ${model}`;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Run Vision Test';
+            }
+        }
+    </script>
+</body>
+</html>

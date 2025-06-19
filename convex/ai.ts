@@ -158,6 +158,21 @@ export const generateResponse = action({
         threadId: args.threadId,
       });
 
+      console.log("🔍 Retrieved messages from Convex:", {
+        count: messages.length,
+        messages: messages.map((m: any) => ({
+          id: m._id,
+          role: m.role,
+          hasAttachments: !!(m.attachments && m.attachments.length > 0),
+          attachmentCount: m.attachments?.length || 0,
+          attachments: m.attachments?.map((a: any) => ({
+            filename: a.filename,
+            contentType: a.contentType,
+            hasUrl: !!a.url
+          }))
+        }))
+      });
+
       // Convert to provider format (exclude the streaming message we just created)
       const conversationHistory = await Promise.all(
         messages
@@ -177,8 +192,16 @@ export const generateResponse = action({
               for (const attachment of msg.attachments) {
                 if (attachment.contentType.startsWith('image/')) {
                   try {
+                    console.log(`📸 Processing image attachment for Gemini:`, {
+                      filename: attachment.filename,
+                      contentType: attachment.contentType,
+                      url: attachment.url
+                    });
+                    
                     // Fetch image data as base64 for Gemini
                     const base64Data = await fetchImageAsBase64(attachment.url);
+                    console.log(`✅ Image converted to base64, length: ${base64Data.length}`);
+                    
                     parts.push({
                       inlineData: {
                         mimeType: attachment.contentType,
@@ -195,6 +218,17 @@ export const generateResponse = action({
                   parts.push({ text: `\n[Attached ${attachment.filename}]:\n${attachment.extractedText}\n` });
                 }
               }
+              
+              console.log(`📨 Prepared multimodal message with ${parts.length} parts for Gemini`, {
+                role: msg.role,
+                partsDetail: parts.map((p, idx) => ({
+                  index: idx,
+                  type: p.text ? 'text' : p.inlineData ? 'image' : 'unknown',
+                  textLength: p.text?.length,
+                  imageDataLength: p.inlineData?.data?.length,
+                  mimeType: p.inlineData?.mimeType
+                }))
+              });
               
               return {
                 role: msg.role as "user" | "assistant" | "system",
@@ -519,6 +553,21 @@ export const sendMessage = action({
         threadId: args.threadId,
       });
 
+      console.log("🔍 Retrieved messages from Convex:", {
+        count: messages.length,
+        messages: messages.map((m: any) => ({
+          id: m._id,
+          role: m.role,
+          hasAttachments: !!(m.attachments && m.attachments.length > 0),
+          attachmentCount: m.attachments?.length || 0,
+          attachments: m.attachments?.map((a: any) => ({
+            filename: a.filename,
+            contentType: a.contentType,
+            hasUrl: !!a.url
+          }))
+        }))
+      });
+
       // Convert to provider format (exclude the streaming message we just created)
       const conversationHistory = await Promise.all(
         messages
@@ -538,8 +587,16 @@ export const sendMessage = action({
               for (const attachment of msg.attachments) {
                 if (attachment.contentType.startsWith('image/')) {
                   try {
+                    console.log(`📸 Processing image attachment for Gemini:`, {
+                      filename: attachment.filename,
+                      contentType: attachment.contentType,
+                      url: attachment.url
+                    });
+                    
                     // Fetch image data as base64 for Gemini
                     const base64Data = await fetchImageAsBase64(attachment.url);
+                    console.log(`✅ Image converted to base64, length: ${base64Data.length}`);
+                    
                     parts.push({
                       inlineData: {
                         mimeType: attachment.contentType,
@@ -556,6 +613,17 @@ export const sendMessage = action({
                   parts.push({ text: `\n[Attached ${attachment.filename}]:\n${attachment.extractedText}\n` });
                 }
               }
+              
+              console.log(`📨 Prepared multimodal message with ${parts.length} parts for Gemini`, {
+                role: msg.role,
+                partsDetail: parts.map((p, idx) => ({
+                  index: idx,
+                  type: p.text ? 'text' : p.inlineData ? 'image' : 'unknown',
+                  textLength: p.text?.length,
+                  imageDataLength: p.inlineData?.data?.length,
+                  mimeType: p.inlineData?.mimeType
+                }))
+              });
               
               return {
                 role: msg.role as "user" | "assistant" | "system",
