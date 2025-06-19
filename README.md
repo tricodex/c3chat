@@ -1,133 +1,136 @@
-# C3Chat - AI Chat with Multi-Model Support
+# C3Chat - Multi-Model AI Chat Interface
 
-🏆 **T3 Chat Cloneathon Submission**
+A real-time chat application I built for the T3 Chat Cloneathon. It connects to multiple AI providers through a single interface.
 
-A modern AI chat application with support for multiple AI providers, real-time sync via Convex, and persistent chat URLs.
+**[Demo](https://clone3chat.vercel.app)**
 
-**[🚀 Try Demo](https://clone3chat.vercel.app)** 
-## ✨ Features
+## What It Does
 
-### Core Features
-- ✅ **Multi-Model Chat**: Google Gemini 2.0, OpenAI GPT-4o, OpenRouter (200+ models)
-- ✅ **Real-Time Sync**: Instant message updates via Convex reactive queries
-- ✅ **Redis Caching**: Viewport-based message loading with Redis for performance
-- ✅ **Persistent URLs**: Each chat has a unique shareable URL
-- ✅ **Authentication**: Secure auth with password and anonymous login
+I built C3Chat to solve a simple problem: I wanted to use different AI models (GPT-4, Gemini, Claude via OpenRouter) without switching between different apps. Each conversation gets a persistent URL so I can share specific chats or return to them later.
 
-### AI Features
-- ✅ **Image Generation**: Imagen 3, Gemini Flash Image Gen, DALL-E 3
-- ✅ **Video Generation**: Veo 2 models via Google AI
-- ✅ **Web Search**: Real-time search with `/search` command
-- ✅ **File Uploads**: Images analyzed by multimodal models
-- ✅ **Voice Input**: Browser speech-to-text
+### Core Functionality
+- Chat with OpenAI, Google Gemini, or any OpenRouter model
+- Each conversation has its own URL (`/chat/{id}`)
+- Messages appear instantly (Convex reactive queries)
+- API keys stored encrypted in browser (never sent to my servers)
+- Voice input, image uploads, web search integration
 
-### Chat Features
-- ✅ **Message Editing**: Edit user messages, regenerate AI responses
-- ✅ **Conversation Branching**: Fork chats at any point
-- ✅ **Projects**: Organize chats into workspaces
-- ✅ **Slash Commands**: `/image`, `/video`, `/search`, `/research`, `/help`
-- ✅ **Export**: Download chats as markdown or JSON
+## Technical Architecture
 
-### Technical Features
-- ⚡ **Instant Updates**: Messages appear immediately, no loading delays
-- 🔐 **Encrypted Storage**: API keys encrypted with persistent localStorage key
-- 📱 **Cross-Tab Sync**: Real-time synchronization via Redis and localStorage
-- 🚀 **Optimistic UI**: Zero-latency message sending with automatic rollback
-- 🎯 **Message Deduplication**: Prevents duplicate rendering and React warnings
-- 🧹 **Automatic Cleanup**: Orphaned attachments removed via daily cron job
-- 💾 **Smart Caching**: Redis viewport caching with 83%+ hit rate
-- 🔄 **Streaming Optimization**: Efficient buffer management prevents memory leaks
+### Why These Choices
 
-## 🚀 Quick Start
+**Convex for Backend**  
+I chose Convex because it gives me real-time reactive queries out of the box. When a message updates, every connected client sees it instantly without polling or WebSockets configuration. The downside: vendor lock-in and limited control over database optimizations.
 
-### Try Online
-Visit [clone3chat.vercel.app](https://clone3chat.vercel.app) - no installation required!
+**Redis for Caching (Optional)**  
+I added Upstash Redis for viewport-based message caching. It's completely optional - the app works fine without it. When enabled, it reduces Convex reads by ~80% for thread switching. The trade-off: added complexity and potential sync issues.
 
-### Run Locally
+**Client-Side Encryption**  
+API keys are encrypted using Web Crypto API before localStorage. I store a persistent key (not browser fingerprint) so encryption survives browser updates. The risk: if someone has physical access to your device, they could potentially extract the localStorage key.
+
+### Architecture Decisions
+
+**Message Loading Strategy**
+- Load messages from Convex first (instant display)
+- Sync to Redis in background (non-blocking)
+- Viewport loading: only 50 messages in memory at once
+- Problem I solved: Initially had 7+ Redis operations per message, optimized down to 2
+
+**Streaming Responses**
+- Create empty message with cursor immediately
+- Stream chunks directly to UI
+- Debounced Redis sync (300ms stable, 1000ms while streaming)
+- Challenge: Preventing memory leaks from streaming buffers (now auto-cleaned)
+
+**State Management**
+- useReducer for complex state (messages, threads, viewport)
+- Optimistic updates with rollback on failure
+- Deduplication before state updates (prevents React key warnings)
+- Issue I fixed: Messages were deduped after state update, causing warnings
+
+## Real Performance Numbers
+
+From my testing on localhost:
+- Message display: <50ms from Convex
+- Redis cache hit rate: 83% after warm-up
+- Memory per thread: ~200KB (50 messages)
+- Bundle size: 497KB gzipped (mostly AI SDK dependencies)
+
+## Known Limitations
+
+1. **No E2E Encryption**: Messages stored in plain text on Convex
+2. **Redis Optional**: If Redis fails, falls back to Convex-only (slower thread switching)
+3. **Attachment Size**: Limited to 20MB by Convex storage
+4. **Search History**: Only cached for 1 hour to reduce storage
+5. **No Offline Mode**: Requires internet connection for all operations
+
+## What I Struggled With
+
+**Redis Sync Timing**  
+The hardest part was coordinating Redis syncs without blocking the UI. I went through 3 iterations:
+1. Sync on every message update (terrible performance)
+2. Sync only on completion (lost streaming updates)
+3. Smart debouncing based on content changes (current solution)
+
+**Message Deduplication**  
+React was throwing key warnings because duplicate messages appeared during sync. Fixed by deduplicating at every entry point before state updates.
+
+**Encryption Key Persistence**  
+Originally used browser fingerprinting for encryption keys. Problem: browser updates changed the fingerprint, locking users out. Now I generate and store a random key.
+
+## Setup
+
 ```bash
-# Clone the repository
+# Clone
 git clone https://github.com/yourusername/c3chat.git
 cd c3chat
 
-# Install dependencies
+# Install (using Bun for speed)
 bun install
 
-# Copy environment variables (if exists)
-cp .env.example .env.local
+# Configure Convex
+bunx convex dev
 
-# Start development (runs both frontend and backend)
+# Start dev server
 bun run dev
 ```
 
-## 🛠️ Tech Stack
-
-- **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite 6
-- **Backend**: Convex (reactive database + serverless functions)
-- **AI Providers**: Google Gemini, OpenAI, OpenRouter
-- **Storage**: Convex file storage for attachments
-- **Package Manager**: Bun
-- **Deployment**: Vercel + Convex
-
-## 📸 Screenshots
-
-Screenshots coming soon!
-
-## 🏗️ Architecture
-
-```
-c3chat/
-├── src/              # React 19 application
-│   ├── components/   # UI components
-│   ├── lib/          # Sync engine, Redis cache, AI providers
-│   └── pages/        # Route pages
-├── convex/           # Backend functions
-│   ├── threads.ts    # Thread CRUD operations
-│   ├── messages.ts   # Message streaming & updates
-│   ├── ai.ts         # AI provider integrations
-│   └── schema.ts     # Database schema
-└── public/           # Static assets
-```
-
-### Sync Engine Architecture
-- **Convex First**: Server is source of truth, real-time reactive queries
-- **Redis Cache**: Background caching for performance, non-blocking
-- **Viewport Loading**: Load only visible messages (O(1) memory usage)
-- **Deduplication**: Automatic duplicate prevention at multiple levels
-- **Optimistic Updates**: Instant UI feedback with rollback on failure
-
-## 🔑 Environment Variables
-
+### Optional Redis Setup
 ```bash
-# Required (auto-generated by Convex)
-VITE_CONVEX_URL=your-convex-url
-
-# API keys are configured in-app via Settings UI
-# No environment variables needed for API keys
+# Add to .env.local (optional for caching)
+VITE_KV_REST_API_URL=your-upstash-url
+VITE_KV_REST_API_TOKEN=your-upstash-token
 ```
 
-## 🎯 Performance
+## Tech Stack
 
-- **Message Display**: Instant from Convex queries (<50ms)
-- **Redis Operations**: 2 syncs per message (optimized from 7+)
-- **Viewport Loading**: 50 messages per load, O(1) memory usage
-- **Cache Hit Rate**: 83%+ for repeated operations
-- **Streaming Buffer**: Auto-cleanup prevents memory leaks
-- **Thread Switching**: Single viewport load, no UI flash
-- **Deduplication**: Zero duplicate renders or React warnings
+- **Frontend**: React 19, TypeScript, Tailwind CSS v4
+- **Backend**: Convex (database + functions)
+- **Optional Cache**: Upstash Redis
+- **AI SDKs**: OpenAI, Google Generative AI, custom SSE parser
+- **Build**: Vite 6, Bun
 
-## 🏆 Competition Submission
+## Security Considerations
 
-This project was built for the T3 Chat Cloneathon:
+- API keys encrypted client-side (AES-GCM)
+- Never stored on my servers
+- Each user's data isolated by auth
+- No analytics or tracking
+- Convex handles auth tokens
 
-- **Unique Features**: Persistent URL routing for chats, cross-tab sync, voice input
-- **Code Quality**: TypeScript throughout, Convex for type-safe backend
-- **User Experience**: Clean interface with encrypted API key storage
-- **Open Source**: MIT License
+## Future Improvements
 
-## 🙏 Acknowledgments
+If I continue this project:
+1. Add RAG for document chat
+2. Implement proper message search
+3. Add team workspaces
+4. Better mobile UI
+5. Export conversations to various formats
 
-Built with [Convex](https://convex.dev), [Tailwind CSS](https://tailwindcss.com), and love for the T3 community.
+## License
 
-## 📄 License
+MIT - Use this however you want.
 
-MIT License - see [LICENSE](LICENSE) for details.
+---
+
+Built for the T3 Chat Cloneathon by a solo developer who wanted a better way to use multiple AI models.

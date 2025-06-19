@@ -13,7 +13,20 @@ async function fetchImageAsBase64(url: string): Promise<string> {
     const response = await fetch(url);
     const blob = await response.blob();
     const buffer = await blob.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
+    
+    // Convert ArrayBuffer to base64 without using Node.js Buffer
+    // Convex runs in a V8 isolate without Node.js APIs
+    const uint8Array = new Uint8Array(buffer);
+    const chunks: string[] = [];
+    
+    // Process in chunks to avoid "Maximum call stack size exceeded" for large images
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      chunks.push(String.fromCharCode(...chunk));
+    }
+    
+    const base64 = btoa(chunks.join(''));
     return base64;
   } catch (error) {
     console.error('Failed to fetch image:', error);

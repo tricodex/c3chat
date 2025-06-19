@@ -887,7 +887,10 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
             inputTokens: msg.inputTokens,
             outputTokens: msg.outputTokens,
             generatedImageUrl: msg.generatedImageUrl,
+            generatedVideoUrl: msg.generatedVideoUrl,
             attachments: msg.attachments || [],
+            isStreaming: msg.isStreaming,
+            cursor: msg.cursor,
           },
         })),
         startCursor: uniqueMessages[0]?._id || '',
@@ -961,6 +964,11 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     model: msg.model,
                     inputTokens: msg.inputTokens,
                     outputTokens: msg.outputTokens,
+                    attachments: msg.attachments,
+                    generatedImageUrl: msg.generatedImageUrl,
+                    generatedVideoUrl: msg.generatedVideoUrl,
+                    isStreaming: msg.isStreaming,
+                    cursor: msg.cursor,
                   },
                 }))
               );
@@ -970,13 +978,13 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 lastSyncedContentRef.current.set(String(msg._id), msg.content);
               }
               
-              // Only refresh viewport if no messages are currently streaming
+              // Skip Redis viewport refresh to prevent losing attachment data
+              // The viewport is already set from Convex data above, which includes all fields
               if (currentlyStreaming.size === 0) {
-                console.log('✅ All messages stable, refreshing viewport from Redis');
-                const freshViewport = await redisCache.current.getViewport(state.selectedThreadId);
-                if (freshViewport && freshViewport.messages.length > 0) {
-                  dispatch({ type: 'SET_VIEWPORT', payload: freshViewport });
-                }
+                console.log('✅ All messages stable, Redis synced but viewport kept from Convex');
+                // Note: We're not refreshing the viewport from Redis anymore because
+                // Redis stores a simplified version of messages that loses attachment data.
+                // The Convex data is already displayed correctly in the UI.
               }
             } catch (error) {
               console.error('Failed to sync messages to Redis:', error);
