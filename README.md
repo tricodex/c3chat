@@ -153,6 +153,8 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 - **File attachments**: Drag & drop images/PDFs with preview (`src/components/FileUpload.tsx`)
 - **Web search**: `/search` command fetches real-time results
 - **Code blocks**: Syntax highlighting with copy button
+- **Encrypted API keys**: Client-side AES-GCM encryption
+
 
 ### UI/UX
 - **Command palette**: Cmd/Ctrl+K for quick actions (`src/components/CommandPalette.tsx`)
@@ -163,19 +165,20 @@ VITE_KV_REST_API_TOKEN=your-upstash-token
 
 ### Extra (wips)
 - **Token tracking**: See usage and costs per message (`src/components/TokenUsageBar.tsx`)
-- **Encrypted API keys**: Client-side AES-GCM encryption
 - **AI agents**: Specialized prompts (Research, Code Expert, Creative)
+![C3Chat Interface](public/agent.png)
 - **Collaboration presence**: See who's typing in real-time (`src/components/CollaborationPresence.tsx`)
 
-### Web3 (Experimental)
+### Stablecoins (Experimental)
 - **Wallet integration**: MetaMask/WalletConnect (`src/components/WalletConnect.tsx`)
 - **USDC payments**: `/pay` command on Base Sepolia testnet **(Gemini models only)**
 - **Get test USDC**: [Base Sepolia Faucet](https://faucet.circle.com/)
 
-## Work in Progress
+## WIPs
 
-These features have partial implementations or UI without backend:
+These features have partial/no implementations or UI without backend or vice versa:
 
+- **Automated Chat Naming**: Not implemented
 - **Thread branching**: UI exists (`/branch` command) but functionality bugged
 - **Export conversations**: Commands shown but export not implemented
 - **Message editing**: Bugged
