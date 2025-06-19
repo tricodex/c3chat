@@ -588,10 +588,16 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         if (threadId && isRedisEnabled) {
           try {
+            // Small delay to allow Convex query to start
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             // Try to load from Redis first (for faster initial display)
             const viewport = await redisCache.current.getViewport(threadId);
             if (viewport && viewport.messages.length > 0) {
+              console.log('✅ Loaded viewport from Redis with', viewport.messages.length, 'messages');
               dispatch({ type: 'SET_VIEWPORT', payload: viewport });
+            } else {
+              console.log('⚠️ Empty or no viewport in Redis, waiting for Convex messages');
             }
             // Convex messages will update the viewport when they arrive
           } catch (error) {
@@ -849,6 +855,8 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   // Debounce and batch message sync to reduce re-renders
   const syncTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastSyncedContentRef = useRef<Map<string, string>>(new Map());
+  const isStreamingRef = useRef<Set<string>>(new Set());
   
   useEffect(() => {
     if (convexMessages && state.selectedThreadId) {
@@ -895,38 +903,95 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       };
       dispatch({ type: 'SET_VIEWPORT', payload: immediateViewport });
       
-      // Debounce Redis sync to avoid rapid updates
-      syncTimeoutRef.current = setTimeout(async () => {
-        if (isRedisEnabled) {
-          try {
-            // Sync to Redis in background (with deduplication)
-            const uniqueMessagesForRedis = Array.from(
-              new Map(convexMessages.map(msg => [msg._id, msg])).values()
-            );
-            
-            await redisCache.current.syncMessages(
-              state.selectedThreadId,
-              uniqueMessagesForRedis.map(msg => ({
-                _id: msg._id,
-                threadId: msg.threadId,
-                content: msg.content,
-                role: msg.role,
-                timestamp: msg._creationTime || Date.now(),
-                version: 1,
-                metadata: {
-                  provider: msg.provider,
-                  model: msg.model,
-                  inputTokens: msg.inputTokens,
-                  outputTokens: msg.outputTokens,
-                },
-              }))
-            );
-          } catch (error) {
-            console.error('Failed to sync messages to Redis:', error);
-            // Don't clear viewport on error - keep existing data
+      // Track streaming messages
+      const currentlyStreaming = new Set<string>();
+      let hasSignificantChanges = false;
+      
+      // Check if we have significant changes that warrant a Redis sync
+      for (const msg of convexMessages) {
+        const msgId = String(msg._id);
+        const lastContent = lastSyncedContentRef.current.get(msgId);
+        
+        if (msg.isStreaming) {
+          currentlyStreaming.add(msgId);
+          // For streaming messages, only mark as changed if content differs significantly
+          if (!lastContent || Math.abs(msg.content.length - lastContent.length) > 100) {
+            hasSignificantChanges = true;
+          }
+        } else {
+          // Non-streaming message
+          if (isStreamingRef.current.has(msgId)) {
+            // Was streaming, now finished - always sync
+            hasSignificantChanges = true;
+            isStreamingRef.current.delete(msgId);
+          } else if (lastContent !== msg.content) {
+            // Content changed
+            hasSignificantChanges = true;
           }
         }
-      }, 300); // 300ms debounce
+      }
+      
+      // Update streaming tracker
+      isStreamingRef.current = currentlyStreaming;
+      
+      // Only sync if we have significant changes or haven't synced this thread yet
+      const hasNeverSynced = uniqueMessages.length > 0 && 
+        !Array.from(lastSyncedContentRef.current.keys()).some(id => 
+          uniqueMessages.some(msg => String(msg._id) === id)
+        );
+      
+      if (hasSignificantChanges || hasNeverSynced) {
+        // Debounce Redis sync - longer delay for streaming messages
+        const syncDelay = currentlyStreaming.size > 0 ? 1000 : 300;
+        
+        syncTimeoutRef.current = setTimeout(async () => {
+          if (isRedisEnabled) {
+            try {
+              console.log(`🔄 Syncing ${uniqueMessages.length} messages to Redis (streaming: ${currentlyStreaming.size})`);
+              
+              // Sync to Redis in background (with deduplication)
+              const uniqueMessagesForRedis = Array.from(
+                new Map(convexMessages.map(msg => [msg._id, msg])).values()
+              );
+              
+              await redisCache.current.syncMessages(
+                state.selectedThreadId,
+                uniqueMessagesForRedis.map(msg => ({
+                  _id: msg._id,
+                  threadId: msg.threadId,
+                  content: msg.content,
+                  role: msg.role,
+                  timestamp: msg._creationTime || Date.now(),
+                  version: 1,
+                  metadata: {
+                    provider: msg.provider,
+                    model: msg.model,
+                    inputTokens: msg.inputTokens,
+                    outputTokens: msg.outputTokens,
+                  },
+                }))
+              );
+              
+              // Update last synced content
+              for (const msg of uniqueMessagesForRedis) {
+                lastSyncedContentRef.current.set(String(msg._id), msg.content);
+              }
+              
+              // Only refresh viewport if no messages are currently streaming
+              if (currentlyStreaming.size === 0) {
+                console.log('✅ All messages stable, refreshing viewport from Redis');
+                const freshViewport = await redisCache.current.getViewport(state.selectedThreadId);
+                if (freshViewport && freshViewport.messages.length > 0) {
+                  dispatch({ type: 'SET_VIEWPORT', payload: freshViewport });
+                }
+              }
+            } catch (error) {
+              console.error('Failed to sync messages to Redis:', error);
+              // Don't clear viewport on error - keep existing data
+            }
+          }
+        }, syncDelay);
+      }
     }
     
     return () => {
@@ -954,6 +1019,24 @@ export const EnhancedSyncProvider: React.FC<{ children: React.ReactNode }> = ({ 
       unsubscribeThreadDeleted();
     };
   }, []);
+  
+  // Clear synced content when switching threads
+  useEffect(() => {
+    if (state.selectedThreadId) {
+      // Clear last synced content for other threads to free memory
+      const currentThreadId = state.selectedThreadId;
+      const keysToRemove: string[] = [];
+      
+      lastSyncedContentRef.current.forEach((_, msgId) => {
+        // Keep only messages from current thread
+        if (!convexMessages?.some(msg => String(msg._id) === msgId)) {
+          keysToRemove.push(msgId);
+        }
+      });
+      
+      keysToRemove.forEach(key => lastSyncedContentRef.current.delete(key));
+    }
+  }, [state.selectedThreadId, convexMessages]);
   
   // Online status monitoring
   useEffect(() => {

@@ -141,17 +141,33 @@ export class RedisCache {
   
   // Message viewport operations
   async getViewport(threadId: string, anchor: 'top' | 'bottom' = 'bottom'): Promise<ViewportCache> {
+    console.log('🔍 getViewport called:', { threadId, anchor });
+    
     // Check L1 cache first
     const cached = this.memoryCache.get(threadId);
     if (cached) {
+      console.log('✅ Using cached viewport with', cached.messages.length, 'messages');
       return cached;
     }
     
     try {
       const key = Keys.messages(threadId);
+      console.log('📋 Redis key:', key);
       
       // Get message count for pagination
       const messageCount = await getRedis().zcard(key);
+      console.log('📊 Message count in Redis:', messageCount);
+      
+      if (messageCount === 0) {
+        console.warn('⚠️ No messages in Redis for thread:', threadId);
+        return {
+          threadId,
+          messages: [],
+          startCursor: null,
+          endCursor: null,
+          hasMore: { top: false, bottom: false }
+        };
+      }
       
       let messages: CachedMessage[];
       let startCursor: string | null = null;
@@ -164,10 +180,25 @@ export class RedisCache {
           -VIEWPORT_SIZE,
           -1
         );
-        // Process raw messages from Redis
-        messages = (rawMessages || []).map(item => 
-          typeof item === 'string' ? JSON.parse(item) : item
-        ) as CachedMessage[];
+        console.log('📨 Raw messages from Redis:', rawMessages?.length || 0);
+        
+        // Robust message parsing with error handling
+        messages = (rawMessages || []).map(item => {
+          try {
+            if (typeof item === 'string') {
+              return JSON.parse(item);
+            } else if (item && typeof item === 'object') {
+              return item;
+            }
+            console.warn('Unexpected message format:', item);
+            return null;
+          } catch (error) {
+            console.error('Failed to parse message:', item, error);
+            return null;
+          }
+        }).filter(Boolean) as CachedMessage[];
+        
+        console.log('✅ Parsed messages:', messages.length);
         
         if (messages.length > 0) {
           startCursor = messages[0]._id;
@@ -180,9 +211,19 @@ export class RedisCache {
           0,
           VIEWPORT_SIZE - 1
         );
-        messages = (rawMessages || []).map(item => 
-          typeof item === 'string' ? JSON.parse(item) : item
-        ) as CachedMessage[];
+        messages = (rawMessages || []).map(item => {
+          try {
+            if (typeof item === 'string') {
+              return JSON.parse(item);
+            } else if (item && typeof item === 'object') {
+              return item;
+            }
+            return null;
+          } catch (error) {
+            console.error('Failed to parse message:', error);
+            return null;
+          }
+        }).filter(Boolean) as CachedMessage[];
         
         if (messages.length > 0) {
           startCursor = messages[0]._id;
@@ -475,6 +516,8 @@ export class RedisCache {
   async syncMessages(threadId: string, messages: CachedMessage[]): Promise<void> {
     if (messages.length === 0) return;
     
+    console.log('🔄 Syncing', messages.length, 'messages to Redis for thread:', threadId);
+    
     try {
       // Clear the viewport cache first to force fresh load
       if (this.memoryCache.has(threadId)) {
@@ -487,11 +530,17 @@ export class RedisCache {
         // Clear existing messages
         await getRedis().del(Keys.messages(threadId));
         
-        // Add all messages with scores
+        // Add all messages with scores, ensuring IDs are strings
         const members = messages.map(msg => ({
           score: msg.timestamp,
-          member: JSON.stringify(msg),
+          member: JSON.stringify({
+            ...msg,
+            _id: String(msg._id), // Force string conversion
+            threadId: String(msg.threadId), // Force string conversion
+          }),
         }));
+        
+        console.log('📝 Adding', members.length, 'messages to Redis');
         
         // Add messages one by one (Upstash format)
         for (const { score, member } of members) {
@@ -504,16 +553,17 @@ export class RedisCache {
         // Set expiry
         await getRedis().expire(Keys.messages(threadId), CACHE_TTL);
         
-        // Messages synced successfully
+        console.log('✅ Messages synced successfully');
       } catch (error) {
         console.error('❌ Failed to sync messages to Redis:', error);
         throw error;
       }
       
-      // Update viewport if it's the current thread
-      if (this.memoryCache.has(threadId)) {
-        await this.getViewport(threadId, 'bottom');
-      }
+      // CRITICAL: Force immediate viewport refresh after sync
+      // This ensures the UI gets the updated data
+      console.log('🔄 Refreshing viewport after sync');
+      const freshViewport = await this.getViewport(threadId, 'bottom');
+      console.log('📊 Fresh viewport loaded with', freshViewport.messages.length, 'messages');
     } catch (error) {
       console.error('Redis syncMessages error:', error);
     }

@@ -8,25 +8,32 @@ A modern AI chat application with support for multiple AI providers, real-time s
 ## ✨ Features
 
 ### Core Features
-- ✅ **Multi-Model Chat**: Google Gemini, OpenAI, and OpenRouter support
-- ✅ **Authentication & Sync**: Real-time sync across devices with Convex
-- ✅ **Browser Friendly**: Modern web app with React 19
-- ✅ **Bring Your Own Key**: All providers require API keys for security
+- ✅ **Multi-Model Chat**: Google Gemini 2.0, OpenAI GPT-4o, OpenRouter (200+ models)
+- ✅ **Real-Time Sync**: Instant message updates via Convex reactive queries
+- ✅ **Redis Caching**: Viewport-based message loading with Redis for performance
+- ✅ **Persistent URLs**: Each chat has a unique shareable URL
+- ✅ **Authentication**: Secure auth with password and anonymous login
 
-### Additional Features
-- ✅ **Attachment Support**: Upload images (multimodal analysis with Gemini/GPT-4o)
-- ✅ **Image Generation**: DALL-E 3 via OpenAI
-- ✅ **Syntax Highlighting**: Code blocks with copy functionality
-- ✅ **Chat Branching**: Fork conversations at any message
-- ✅ **Message Editing**: Edit and regenerate any message
-- ⚠️ **Web Search**: Tavily API (requires backend API key)
-- ✅ **Bring Your Own Key**: Use your own API keys for providers
+### AI Features
+- ✅ **Image Generation**: Imagen 3, Gemini Flash Image Gen, DALL-E 3
+- ✅ **Video Generation**: Veo 2 models via Google AI
+- ✅ **Web Search**: Real-time search with `/search` command
+- ✅ **File Uploads**: Images analyzed by multimodal models
+- ✅ **Voice Input**: Browser speech-to-text
 
-- 🎙️ **Voice Input**: Browser-based speech recognition
-- ⚡ **Cross-Tab Sync**: localStorage events for instant sync
-- 🔍 **Slash Commands**: `/image`, `/search`, `/help`
-- 🔐 **Security**: Encrypted API key storage with AES-GCM
-- 🔗 **URL Routing**: Direct links to specific chats
+### Chat Features
+- ✅ **Message Editing**: Edit user messages, regenerate AI responses
+- ✅ **Conversation Branching**: Fork chats at any point
+- ✅ **Projects**: Organize chats into workspaces
+- ✅ **Slash Commands**: `/image`, `/video`, `/search`, `/research`, `/help`
+- ✅ **Export**: Download chats as markdown or JSON
+
+### Technical Features
+- ⚡ **Instant Updates**: Messages appear immediately without delays
+- 🔐 **Encrypted Storage**: API keys encrypted with Web Crypto API
+- 📱 **Cross-Tab Sync**: localStorage + Redis for multi-tab consistency
+- 🚀 **Optimistic UI**: Send messages without waiting for server
+- 🎯 **Smart Deduplication**: Prevents duplicate messages automatically
 
 ## 🚀 Quick Start
 
@@ -66,22 +73,24 @@ Screenshots coming soon!
 
 ```
 c3chat/
-├── src/              # React application
+├── src/              # React 19 application
 │   ├── components/   # UI components
-│   ├── lib/          # Utilities & sync engine
+│   ├── lib/          # Sync engine, Redis cache, AI providers
 │   └── pages/        # Route pages
 ├── convex/           # Backend functions
-│   ├── threads.ts    # Thread management
-│   ├── messages.ts   # Message operations
-│   └── auth.ts       # Authentication
-└── docs/             # Documentation
+│   ├── threads.ts    # Thread CRUD operations
+│   ├── messages.ts   # Message streaming & updates
+│   ├── ai.ts         # AI provider integrations
+│   └── schema.ts     # Database schema
+└── public/           # Static assets
 ```
 
-### Key Features
-- Each chat has a unique URL: `/chat/{uuid}`
-- Direct linking to specific conversations
-- Browser back/forward navigation support
-- Cross-tab synchronization via localStorage
+### Sync Engine Architecture
+- **Convex First**: Server is source of truth, real-time reactive queries
+- **Redis Cache**: Background caching for performance, non-blocking
+- **Viewport Loading**: Load only visible messages (O(1) memory usage)
+- **Deduplication**: Automatic duplicate prevention at multiple levels
+- **Optimistic Updates**: Instant UI feedback with rollback on failure
 
 ## 🔑 Environment Variables
 
@@ -93,10 +102,13 @@ VITE_CONVEX_URL=your-convex-url
 # No environment variables needed for API keys
 ```
 
-## 📚 Documentation
+## 🎯 Performance
 
-- [Redis Integration](docs/REDIS_INTEGRATION_SUMMARY.md) - Optional caching layer
-- Additional documentation in progress
+- **Instant Message Display**: Messages appear immediately from Convex
+- **Background Sync**: Redis caching happens asynchronously
+- **Smart Loading**: Viewport-based pagination (50 messages at a time)
+- **Debounced Updates**: Prevents excessive re-renders
+- **Message Deduplication**: Automatic duplicate prevention
 
 ## 🏆 Competition Submission
 
