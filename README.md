@@ -20,6 +20,8 @@ Messages appear instantly and sync across every tab by sending only the small pa
 - OpenRouter: GPT-4o-mini, DeepSeek-R1, Llama-70B
 - Instant cross-tab sync
 - Web search via `/search` command
+- Longer web search via `/research` command
+- Image gen via `/image` command and Imagen 3 model (untested, but got the correct not allowed on free tier message)
 - File uploads (images/PDFs)
 - Offline message queueing
 
