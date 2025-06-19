@@ -22,6 +22,8 @@ Messages appear instantly and sync across every tab by sending only the small pa
 - Web search via `/search` command
 - Longer web search via `/research` command
 - Image gen via `/image` command and Imagen 3 model (untested, but got the correct not allowed on free tier message)
+- Clear chat via `/clear` command
+- Pay USDC via `/pay` command
 - File uploads (images/PDFs)
 - Offline message queueing
 
