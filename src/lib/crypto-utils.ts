@@ -53,6 +53,23 @@ async function getUserKey(): Promise<string> {
   return newKey;
 }
 
+// Clear all encryption keys (for logout)
+export function clearEncryptionKeys(): void {
+  localStorage.removeItem('c3chat_encryption_key_v2');
+  localStorage.removeItem('c3chat_encryption_key_v2_fingerprint');
+  
+  // Clear any encrypted data flags
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.includes('_encrypted')) {
+      keysToRemove.push(key);
+    }
+  }
+  
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+}
+
 // Generate browser fingerprint for fallback/migration
 function generateBrowserFingerprint(): string {
   const userAgent = navigator.userAgent;

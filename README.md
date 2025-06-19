@@ -1,136 +1,187 @@
-# C3Chat - Multi-Model AI Chat Interface
+# C3Chat
 
-A real-time chat application I built for the T3 Chat Cloneathon. It connects to multiple AI providers through a single interface.
+![C3Chat Interface](public/app.png)
+*This is what it looks like with padding*
 
-**[Demo](https://clone3chat.vercel.app)**
+A multi-model AI chat interface built for the T3 Chat Cloneathon. Works with Gemini and OpenRouter models (tested with GPT-4o-mini, DeepSeek-R1, Llama-70B).
 
-## What It Does
+**Demo**: [clone3chat.vercel.app](https://clone3chat.vercel.app)  
+**Note**: Don't use real passwords - auth security not fully verified.
 
-I built C3Chat to solve a simple problem: I wanted to use different AI models (GPT-4, Gemini, Claude via OpenRouter) without switching between different apps. Each conversation gets a persistent URL so I can share specific chats or return to them later.
+First time deploying with Vite instead of my usual Next.js - the padding you see in the screenshot doesn't show up in production and I ran out of time to debug why. The CSS is there, it just... doesn't apply.
 
-### Core Functionality
-- Chat with OpenAI, Google Gemini, or any OpenRouter model
-- Each conversation has its own URL (`/chat/{id}`)
-- Messages appear instantly (Convex reactive queries)
-- API keys stored encrypted in browser (never sent to my servers)
-- Voice input, image uploads, web search integration
+## What I Built
 
-## Technical Architecture
+A chat app that syncs messages instantly across tabs using Convex. Each conversation gets a URL (`/chat/{id}`). API keys are encrypted client-side and never leave your browser. YOU CAN MAKE STABLECOIN PAYMENTS with USDC
 
-### Why These Choices
+### Tested Features
+- Google Gemini (free tier)
+- OpenRouter: GPT-4o-mini, DeepSeek-R1, Llama-70B
+- Instant cross-tab sync
+- Web search via `/search` command
+- File uploads (images/PDFs)
+- Offline message queueing
 
-**Convex for Backend**  
-I chose Convex because it gives me real-time reactive queries out of the box. When a message updates, every connected client sees it instantly without polling or WebSockets configuration. The downside: vendor lock-in and limited control over database optimizations.
+### Known Issues
+- Gemini setup requires manual API key entry in settings
+- Only tested two AI providers thoroughly
 
-**Redis for Caching (Optional)**  
-I added Upstash Redis for viewport-based message caching. It's completely optional - the app works fine without it. When enabled, it reduces Convex reads by ~80% for thread switching. The trade-off: added complexity and potential sync issues.
+## Technical Choices
 
-**Client-Side Encryption**  
-API keys are encrypted using Web Crypto API before localStorage. I store a persistent key (not browser fingerprint) so encryption survives browser updates. The risk: if someone has physical access to your device, they could potentially extract the localStorage key.
+### Why Vite Instead of Next.js
+I chose Vite, because I have Convex as the backend:
+No need for Next.js API routes
+No need for SSR/SSG - Convex handles real-time data
+No need for middleware or server components
+Authentication is handled by Convex Auth. 
+This is a client-rendered SPA, no server-side logic. Vite gives me:
+- 390ms cold starts vs 4.5s with CRA
+- Instant hot module replacement
+- No need for SSR/SSG - Convex handles real-time data
 
-### Architecture Decisions
+### Why Convex + Redis
+**Convex** (`convex/` directory) handles:
+- Real-time subscriptions without WebSocket setup
+- Database with reactive queries
+- User auth out of the box
 
-**Message Loading Strategy**
-- Load messages from Convex first (instant display)
-- Sync to Redis in background (non-blocking)
-- Viewport loading: only 50 messages in memory at once
-- Problem I solved: Initially had 7+ Redis operations per message, optimized down to 2
+**Redis** (`src/lib/redis-cache.ts`) is optional:
+- Reduces Convex reads by ~80% when switching threads
+- Viewport caching (50 messages at a time)
+- Falls back gracefully if unavailable
 
-**Streaming Responses**
-- Create empty message with cursor immediately
-- Stream chunks directly to UI
-- Debounced Redis sync (300ms stable, 1000ms while streaming)
-- Challenge: Preventing memory leaks from streaming buffers (now auto-cleaned)
+### Key Implementation Details
 
-**State Management**
-- useReducer for complex state (messages, threads, viewport)
-- Optimistic updates with rollback on failure
-- Deduplication before state updates (prevents React key warnings)
-- Issue I fixed: Messages were deduped after state update, causing warnings
+**Message Sync** (`src/lib/scalable-sync-engine-v2.tsx`):
+```typescript
+// Smart sync detection - only sync significant changes
+if (msg.isStreaming) {
+  // For streaming, sync only if content differs by >100 chars
+  if (!lastContent || Math.abs(msg.content.length - lastContent.length) > 100) {
+    hasSignificantChanges = true;
+  }
+} else if (isStreamingRef.current.has(msgId)) {
+  // Was streaming, now finished - always sync
+  hasSignificantChanges = true;
+  isStreamingRef.current.delete(msgId);
+}
 
-## Real Performance Numbers
+// Debounced sync - 300ms stable, 1000ms while streaming
+const syncDelay = currentlyStreaming.size > 0 ? 1000 : 300;
+```
 
-From my testing on localhost:
+**Redis Cache** (`src/lib/redis-cache.ts`):
+```typescript
+// Viewport loading with error handling
+const rawMessages = await getRedis().zrange(key, -VIEWPORT_SIZE, -1);
+
+messages = (rawMessages || []).map(item => {
+  try {
+    if (typeof item === 'string') {
+      return JSON.parse(item);
+    } else if (item && typeof item === 'object') {
+      return item;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to parse message:', item, error);
+    return null;
+  }
+});
+```
+
+**Encryption** (`src/lib/crypto-utils.ts`):
+- AES-GCM with persistent key (not fingerprint-based)
+- Key stored in localStorage survives browser updates
+
+**AI Integration** (`convex/ai.ts`):
+- Each provider has its own adapter
+- Streaming responses update every chunk
+- Function calling for payments (experimental)
+
+## Performance Reality
+
+From local testing:
+- Bundle size: 497KB gzipped
 - Message display: <50ms from Convex
-- Redis cache hit rate: 83% after warm-up
 - Memory per thread: ~200KB (50 messages)
-- Bundle size: 497KB gzipped (mostly AI SDK dependencies)
+- Redis operations: 2 per message (was 7+)
 
-## Known Limitations
+## Security Warnings
 
-1. **No E2E Encryption**: Messages stored in plain text on Convex
-2. **Redis Optional**: If Redis fails, falls back to Convex-only (slower thread switching)
-3. **Attachment Size**: Limited to 20MB by Convex storage
-4. **Search History**: Only cached for 1 hour to reduce storage
-5. **No Offline Mode**: Requires internet connection for all operations
-
-## What I Struggled With
-
-**Redis Sync Timing**  
-The hardest part was coordinating Redis syncs without blocking the UI. I went through 3 iterations:
-1. Sync on every message update (terrible performance)
-2. Sync only on completion (lost streaming updates)
-3. Smart debouncing based on content changes (current solution)
-
-**Message Deduplication**  
-React was throwing key warnings because duplicate messages appeared during sync. Fixed by deduplicating at every entry point before state updates.
-
-**Encryption Key Persistence**  
-Originally used browser fingerprinting for encryption keys. Problem: browser updates changed the fingerprint, locking users out. Now I generate and store a random key.
+1. **Passwords**: Auth implementation not security-audited. Use throwaway passwords.
+2. **API Keys**: Encrypted locally but physical device access could expose them.
+3. **Fixed**: Previous bug where API keys persisted between user accounts (see `SECURITY-FIX-API-KEY-ISOLATION.md`)
 
 ## Setup
 
 ```bash
-# Clone
-git clone https://github.com/yourusername/c3chat.git
+git clone [repo]
 cd c3chat
-
-# Install (using Bun for speed)
 bun install
-
-# Configure Convex
 bunx convex dev
-
-# Start dev server
 bun run dev
 ```
 
-### Optional Redis Setup
-```bash
-# Add to .env.local (optional for caching)
+Optional Redis (`.env.local`):
+```
 VITE_KV_REST_API_URL=your-upstash-url
 VITE_KV_REST_API_TOKEN=your-upstash-token
 ```
 
-## Tech Stack
+## What Didn't Work
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS v4
-- **Backend**: Convex (database + functions)
-- **Optional Cache**: Upstash Redis
-- **AI SDKs**: OpenAI, Google Generative AI, custom SSE parser
-- **Build**: Vite 6, Bun
+1. **Message Deduplication**: Initially deduped after state updates, causing React key warnings. Fixed in `scalable-sync-engine-v2.tsx`.
+2. **Browser Fingerprinting**: Keys got lost on browser updates. Switched to persistent random keys.
+3. **Excessive Redis Sync**: Was syncing on every character. Now uses smart debouncing.
 
-## Security Considerations
+## Stack
 
-- API keys encrypted client-side (AES-GCM)
-- Never stored on my servers
-- Each user's data isolated by auth
-- No analytics or tracking
-- Convex handles auth tokens
+- Frontend: React 19, TypeScript, Vite 6
+- Backend: Convex (database + functions)
+- Cache: Upstash Redis (optional)
+- UI: Tailwind CSS v4
+- Build: Bun
 
-## Future Improvements
+## Features
 
-If I continue this project:
-1. Add RAG for document chat
-2. Implement proper message search
-3. Add team workspaces
-4. Better mobile UI
-5. Export conversations to various formats
+### Core
+- **Multi-provider AI chat**: OpenAI, Gemini, Anthropic (via OpenRouter), DeepSeek
+- **Real-time sync**: Messages appear instantly across tabs
+- **Voice input/output**: 11+ languages with adjustable speech settings (`src/components/VoiceControls.tsx`)
+- **File attachments**: Drag & drop images/PDFs with preview (`src/components/FileUpload.tsx`)
+- **Web search**: `/search` command fetches real-time results
+- **Code blocks**: Syntax highlighting with copy button
 
-## License
+### UI/UX
+- **Command palette**: Cmd/Ctrl+K for quick actions (`src/components/CommandPalette.tsx`)
+- **Dark/light themes**: Persistent theme switching
+- **Markdown support**: Tables, lists, code blocks
+- **Thread management**: Create, delete conversations
+- **Mobile responsive**: Works on all screen sizes
 
-MIT - Use this however you want.
+### Advanced
+- **Token tracking**: See usage and costs per message (`src/components/TokenUsageBar.tsx`)
+- **Encrypted API keys**: Client-side AES-GCM encryption
+- **AI agents**: Specialized prompts (Research, Code Expert, Creative)
+- **Collaboration presence**: See who's typing in real-time (`src/components/CollaborationPresence.tsx`)
+
+### Web3 (Experimental)
+- **Wallet integration**: MetaMask/WalletConnect (`src/components/WalletConnect.tsx`)
+- **USDC payments**: `/pay` command on Base Sepolia testnet (Gemini models only)
+- **Get test USDC**: [Base Sepolia Faucet](https://faucet.circle.com/)
+
+## Work in Progress (WIP)
+
+These features have partial implementations or UI without backend:
+
+- **Thread branching**: UI exists (`/branch` command) but functionality incomplete
+- **Export conversations**: Commands shown but export not implemented
+- **Message editing**: Not implemented
+- **Thread archiving**: Not implemented
+- **Projects/Workspaces**: Backend exists (`convex/projects.ts`) but no UI
+- **Security audit**: Not conducted - use throwaway passwords
 
 ---
 
-Built for the T3 Chat Cloneathon by a solo developer who wanted a better way to use multiple AI models.
+Built in a week for the [T3 Chat Cloneathon](https://cloneathon.t3.chat/). Prize deadline: June 18, 2025.

@@ -570,7 +570,6 @@ export function ChatView() {
             <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--c3-surface-primary)] rounded-lg border border-[var(--c3-border-subtle)]">
               <TrendingUp className="w-4 h-4 text-[var(--c3-primary)]" />
               <span className="text-sm font-mono text-[var(--c3-text-secondary)]">
-                Tokens: 1.2K
               </span>
             </div>
             

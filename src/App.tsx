@@ -71,6 +71,42 @@ function Content({ theme, setTheme, sidebarOpen, setSidebarOpen }: {
   setSidebarOpen: (open: boolean) => void;
 }) {
   const loggedInUser = useQuery(api.auth.loggedInUser);
+  const [lastUserId, setLastUserId] = useState<string | null>(null);
+
+  // Security: Clear sensitive data when user changes
+  useEffect(() => {
+    if (loggedInUser && loggedInUser._id !== lastUserId) {
+      // User has changed (either login or different user)
+      if (lastUserId !== null) {
+        // This is a user switch, not initial load
+        console.warn("User change detected, clearing sensitive data for security");
+        
+        // Clear all API keys and encryption keys
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (
+            key.startsWith('c3chat_api_key_') ||
+            key.startsWith('c3chat_encryption_key') ||
+            key.startsWith('apiKey_') ||
+            key.includes('_encrypted')
+          )) {
+            keysToRemove.push(key);
+          }
+        }
+        
+        keysToRemove.forEach(key => {
+          console.log(`Removing sensitive key: ${key}`);
+          localStorage.removeItem(key);
+        });
+        
+        // Force page reload to ensure clean state
+        window.location.reload();
+      }
+      
+      setLastUserId(loggedInUser._id);
+    }
+  }, [loggedInUser, lastUserId]);
 
   if (loggedInUser === undefined) {
     return (
